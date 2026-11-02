@@ -59,21 +59,45 @@ if ($LASTEXITCODE -ne 0) { Fail "Не удалось упаковать папк
 Ok ("Архив готов: {0:N1} МБ" -f ((Get-Item $arch).Length / 1MB))
 
 $target = "$user@$ip"
-$sshOpts = @('-o','StrictHostKeyChecking=accept-new','-o','ServerAliveInterval=30','-o','ConnectTimeout=20','-o','PreferredAuthentications=password','-o','PubkeyAuthentication=no')
+$base = @('-o','StrictHostKeyChecking=accept-new','-o','ServerAliveInterval=30','-o','ConnectTimeout=25')
 
-Write-Host ""
-Write-Host "Сейчас ДВАЖДЫ появится строка  ...password:" -ForegroundColor Yellow
-Write-Host "Каждый раз: правая кнопка мыши (вставится пароль root), затем Enter." -ForegroundColor Yellow
-Write-Host "Символы пароля НЕ видны — это нормально." -ForegroundColor Yellow
-Write-Host ""
+# --- ключ доступа: пароль root вводится ОДИН раз, дальше вход по ключу ---
+$sshDir = Join-Path $env:USERPROFILE '.ssh'
+if (-not (Test-Path $sshDir)) { New-Item -ItemType Directory -Path $sshDir | Out-Null }
+$key = Join-Path $sshDir 'prometey_ed25519'
+if (-not (Test-Path $key)) { & ssh-keygen -q -t ed25519 -f $key -N '""' -C 'prometey-deploy' | Out-Null }
+if (-not (Test-Path "$key.pub")) { Fail "Не удалось создать ключ доступа (ssh-keygen)." }
+$sshOpts = $base + @('-i',$key,'-o','IdentitiesOnly=yes')
+
+function Test-Key { $old = $ErrorActionPreference; $ErrorActionPreference = 'Continue'; try { & ssh @sshOpts -o BatchMode=yes $target 'true' 2>$null | Out-Null; return ($LASTEXITCODE -eq 0) } catch { return $false } finally { $ErrorActionPreference = $old } }
+
+if (Test-Key) { Ok "Вход на сервер по ключу — пароль не нужен" }
+else {
+  Write-Host ""
+  Write-Host "Сейчас появится строка  root@$ip's password:" -ForegroundColor Yellow
+  Write-Host "Скопируйте пароль root (Ctrl+C), щёлкните ПРАВОЙ кнопкой мыши в этом окне и нажмите Enter." -ForegroundColor Yellow
+  Write-Host "Символы пароля НЕ видны — это нормально. Пароль нужен только один раз." -ForegroundColor Yellow
+  Write-Host ""
+  $pub = (Get-Content "$key.pub" -Raw).Trim()
+  $addKey = "umask 077; mkdir -p ~/.ssh; touch ~/.ssh/authorized_keys; grep -qxF '$pub' ~/.ssh/authorized_keys || echo '$pub' >> ~/.ssh/authorized_keys"
+  $ok = $false
+  for ($try = 1; $try -le 5 -and -not $ok; $try++) {
+    & ssh @base -o PreferredAuthentications=password -o PubkeyAuthentication=no -o NumberOfPasswordPrompts=1 $target $addKey
+    $code = $LASTEXITCODE
+    if ($code -eq 0 -and (Test-Key)) { $ok = $true; break }
+    if ($try -lt 5) { Write-Host ""; Info "Не получилось (неверный пароль или сервер не ответил). Ещё раз ($($try+1)/5) — снова вставьте пароль root."; Start-Sleep -Seconds 5 }
+  }
+  if (-not $ok) { Fail "Не удалось войти на сервер. 'Permission denied' — пароль root неверный: скопируйте его заново из письма или сбросьте в панели Рег.облака. 'timed out' — сервер перегружен: подождите 5 минут и запустите снова." }
+  Ok "Доступ по ключу настроен — больше пароль не понадобится"
+}
 
 Info "Отправляю файлы на сервер (1/2)…"
 $sent = $false
-for ($try = 1; $try -le 3 -and -not $sent; $try++) {
+for ($try = 1; $try -le 5 -and -not $sent; $try++) {
   & scp @sshOpts $arch $installer "${target}:/root/"
-  if ($LASTEXITCODE -eq 0) { $sent = $true } elseif ($try -lt 3) { Info "Сервер не ответил или пароль не подошёл — попробуем ещё раз ($($try+1)/3)…"; Start-Sleep -Seconds 5 }
+  if ($LASTEXITCODE -eq 0) { $sent = $true } elseif ($try -lt 5) { Info "Сервер не ответил — повтор через 10 секунд ($($try+1)/5)…"; Start-Sleep -Seconds 10 }
 }
-if (-not $sent) { Fail "Не удалось подключиться. Если было 'Permission denied' — неверный пароль root. Если 'timed out' — сервер выключен или перезагружается: подождите 5 минут." }
+if (-not $sent) { Fail "Не удалось отправить файлы: сервер не отвечает. Подождите 5 минут и запустите снова." }
 Ok "Файлы на сервере"
 
 Info "Запускаю установку на сервере (2/2). Это займёт 5–15 минут…"
@@ -86,7 +110,7 @@ for ($try = 1; $try -le 5; $try++) {
   if ($code -eq 0) { break }
   if ($code -ne 255 -or $try -eq 5) { Fail "Установка завершилась с ошибкой. Сделайте снимок экрана и пришлите его." }
   Write-Host ""
-  Info "Сервер не ответил — повторяю через 10 секунд ($($try+1)/5). Когда спросят password: — снова правая кнопка мыши и Enter."
+  Info "Сервер не ответил — повторяю через 10 секунд ($($try+1)/5)…"
   Start-Sleep -Seconds 10
 }
 
