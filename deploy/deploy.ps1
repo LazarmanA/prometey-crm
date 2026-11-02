@@ -31,18 +31,19 @@ else {
 }
 Ok "Папка проекта: $proj"
 
-# --- адрес сервера (запоминаем для следующих обновлений) ---
+# --- адрес сервера: берём из server.txt, лишних вопросов не задаём ---
 $cfg = Join-Path $here 'server.txt'
-$savedIp = ''; $savedUser = 'root'
-if (Test-Path $cfg) { $l = Get-Content $cfg; $savedIp = $l[0]; if ($l.Count -gt 1 -and $l[1]) { $savedUser = $l[1] } }
-
-$ip = Read-Host "IP-адрес сервера$(if ($savedIp) { " [$savedIp]" })"
-if (-not $ip) { $ip = $savedIp }
-$ip = $ip.Trim()
-if (-not $ip) { Fail "IP-адрес не введён. Он есть в письме или в панели хостинга." }
-$user = Read-Host "Пользователь [$savedUser]"
-if (-not $user) { $user = $savedUser }
+$ip = ''; $user = 'root'
+if (Test-Path $cfg) { $l = @(Get-Content $cfg); if ($l.Count -gt 0) { $ip = "$($l[0])".Trim() }; if ($l.Count -gt 1 -and "$($l[1])".Trim()) { $user = "$($l[1])".Trim() } }
+# защита от случайно вписанного пароля: адрес — только цифры и точки (или домен), пользователь — латиница в нижнем регистре
+if ($ip -notmatch '^(\d{1,3}\.){3}\d{1,3}$' -and $ip -notmatch '^[a-z0-9.-]+\.[a-z]{2,}$') { $ip = '' }
+if ($user -cnotmatch '^(root|ubuntu|admin)$') { $user = 'root' }  # на серверах Рег.облака вход всегда root
+if (-not $ip) {
+  $ip = (Read-Host "Введите IP-адрес сервера (например 89.108.70.182)").Trim()
+  if ($ip -notmatch '^(\d{1,3}\.){3}\d{1,3}$' -and $ip -notmatch '^[a-z0-9.-]+\.[a-z]{2,}$') { Fail "'$ip' — это не IP-адрес. IP выглядит так: 89.108.70.182" }
+}
 Set-Content -Path $cfg -Value @($ip, $user) -Encoding ASCII
+Ok "Сервер: $user@$ip"
 
 $installer = Join-Path $here 'install-server.sh'
 if (-not (Test-Path $installer)) { Fail "Рядом нет файла install-server.sh — положите его в ту же папку." }
@@ -58,16 +59,21 @@ if ($LASTEXITCODE -ne 0) { Fail "Не удалось упаковать папк
 Ok ("Архив готов: {0:N1} МБ" -f ((Get-Item $arch).Length / 1MB))
 
 $target = "$user@$ip"
-$sshOpts = @('-o','StrictHostKeyChecking=accept-new','-o','ServerAliveInterval=30')
+$sshOpts = @('-o','StrictHostKeyChecking=accept-new','-o','ServerAliveInterval=30','-o','ConnectTimeout=20','-o','PreferredAuthentications=password','-o','PubkeyAuthentication=no')
 
 Write-Host ""
-Write-Host "Сейчас дважды спросят ПАРОЛЬ от сервера (root). При вводе символы НЕ видны — это нормально." -ForegroundColor Yellow
-Write-Host "Пароль можно вставить правой кнопкой мыши, затем Enter." -ForegroundColor Yellow
+Write-Host "Сейчас ДВАЖДЫ появится строка  ...password:" -ForegroundColor Yellow
+Write-Host "Каждый раз: правая кнопка мыши (вставится пароль root), затем Enter." -ForegroundColor Yellow
+Write-Host "Символы пароля НЕ видны — это нормально." -ForegroundColor Yellow
 Write-Host ""
 
 Info "Отправляю файлы на сервер (1/2)…"
-& scp @sshOpts $arch $installer "${target}:/root/"
-if ($LASTEXITCODE -ne 0) { Fail "Не удалось отправить файлы. Проверьте IP и пароль." }
+$sent = $false
+for ($try = 1; $try -le 3 -and -not $sent; $try++) {
+  & scp @sshOpts $arch $installer "${target}:/root/"
+  if ($LASTEXITCODE -eq 0) { $sent = $true } elseif ($try -lt 3) { Info "Сервер не ответил или пароль не подошёл — попробуем ещё раз ($($try+1)/3)…"; Start-Sleep -Seconds 5 }
+}
+if (-not $sent) { Fail "Не удалось подключиться. Если было 'Permission denied' — неверный пароль root. Если 'timed out' — сервер выключен или перезагружается: подождите 5 минут." }
 Ok "Файлы на сервере"
 
 Info "Запускаю установку на сервере (2/2). Это займёт 5–15 минут…"
