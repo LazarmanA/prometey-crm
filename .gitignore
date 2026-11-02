@@ -1,0 +1,27 @@
+# Данные, базы, резервные копии — никогда не в репозиторий
+node_modules/
+*.sqlite
+*.sqlite-*
+*.log
+.env
+.env.*
+!.env.example
+crm/data/
+crm/storage/*.sqlite*
+crm/storage/documents/
+crm/storage/uploads/
+crm/storage/recordings/
+crm/storage/backups/
+crm/storage/avito.json
+crm/storage/installation.json
+crm/storage/license-state.json
+crm/backups/
+vendor/data/
+*.pem
+# Сборка установщика
+installer/dist/
+installer/app.zip
+installer/node.zip
+installer/*.syso
+*.exe
+.DS_Store

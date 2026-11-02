@@ -1,0 +1,24 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path');
+const Documents=require('../lib/documents');
+const calc=Documents.validateItems([{description:'КАМАЗ',quantity:18,unit:'trip',rate:12000},{description:'Переработка',quantity:6,unit:'hour',rate:4500}],20,true);assert.equal(calc.totalGross,243000);assert.equal(calc.totalNet,202500);assert.equal(calc.vatTotal,40500);
+const temp=fs.mkdtempSync(path.join(os.tmpdir(),'prometey-docs-'));process.env.DATA_FILE=path.join(temp,'data.json');process.env.PROMETEY_CHROMIUM=process.env.PROMETEY_CHROMIUM||'/usr/bin/chromium';fs.copyFileSync(path.join(__dirname,'../storage/data.demo.json'),process.env.DATA_FILE);const server=require('../server');let base;
+async function req(p,token,method='GET',body){const r=await fetch(base+p,{method,headers:{...(token?{Authorization:'Bearer '+token}:{}),'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});const type=r.headers.get('content-type')||'';return {status:r.status,body:type.includes('application/json')?await r.json():Buffer.from(await r.arrayBuffer()),headers:r.headers}}
+(async()=>{try{await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve)});base='http://127.0.0.1:'+server.address().port;
+ const login=async role=>(await req('/api/login',null,'POST',{email:role+'@prometey.local',password:role})).body.token;const director=await login('director'),manager=await login('manager');
+ assert.equal((await req('/api/documents/issue',manager,'POST',{type:'invoice',orderId:'o2',legalEntityId:'le-demo',source:'plan',vatRate:20,vatIncluded:true,date:'2026-10-16'})).status,403,'foreign deal issue blocked');
+ assert.equal((await req('/api/documents/legal-entities/le-demo',manager,'PATCH',{name:'hack'})).status,403,'legal entity protected');
+ const preview=(await req('/api/documents/preview',manager,'POST',{type:'invoice',orderId:'o1',legalEntityId:'le-demo',source:'plan',vatRate:20,vatIncluded:true})).body;assert(preview.items.length>=1&&preview.totalGross>0,'invoice preview');
+ const input={type:'invoice',orderId:'o1',legalEntityId:'le-demo',source:'plan',vatRate:20,vatIncluded:true,date:'2026-10-16',items:preview.items};
+ const [a,b]=await Promise.all([req('/api/documents/issue',manager,'POST',input),req('/api/documents/issue',manager,'POST',input)]);assert.equal(a.status,201);assert.equal(b.status,201);assert.notEqual(a.body.number,b.body.number);assert(new Set([a.body.number,b.body.number]).size===2,'parallel numbers unique');assert(/^СЧ-2026-\d{6}$/.test(a.body.number));
+ const file=await req('/api/documents/'+a.body.id+'/file',manager);assert.equal(file.status,200);assert.equal(file.headers.get('content-type'),'application/pdf');assert.equal(file.body.subarray(0,4).toString(),'%PDF');assert(file.body.length>5000,'real PDF generated');
+ const contract=(await req('/api/documents/issue',manager,'POST',{type:'contract',orderId:'o1',legalEntityId:'le-demo',date:'2026-10-16'})).body;assert(/^ДГ-2026-\d{6}$/.test(contract.number));
+ const cfile=await req('/api/documents/'+contract.id+'/file',manager);assert.equal(cfile.body.subarray(0,4).toString(),'%PDF');
+ const registry=(await req('/api/documents?orderId=o1',manager)).body;assert(registry.some(x=>x.id===contract.id)&&registry.some(x=>x.id===a.body.id));assert(!registry.some(x=>x.file?.path),'filesystem path hidden');
+ const summary=(await req('/api/documents/summary?kind=orders&id=o1',manager)).body;assert(summary.invoices>=2&&summary.contracts>=1&&summary.unpaid>0);
+ const shifted=(await req('/api/shifts/s1',manager,'PATCH',{unit:'shift',billableQuantity:1,saleRate:1000,purchaseRate:500,overtime:2,overtimeSaleRate:250,overtimePurchaseRate:100})).body;assert.equal(shifted.overtimeSaleRate,250);
+ const actual=(await req('/api/documents/preview',manager,'POST',{type:'invoice',orderId:'o1',legalEntityId:'le-demo',source:'actual',vatRate:20,vatIncluded:true})).body;assert(actual.items.some(x=>x.sourceType==='shiftOvertime'),'overtime becomes invoice line');
+ const fin=(await req('/api/finance?mode=actual',manager)).body;assert(fin.totals.revenue>=1500,'overtime included in actual finance');
+ const updated=(await req('/api/documents/'+a.body.id+'/status',manager,'PATCH',{paymentStatus:'paid'})).body;assert.equal(updated.paymentStatus,'paid');
+ const after=(await req('/api/documents/summary?kind=orders&id=o1',manager)).body;assert(after.unpaid<summary.unpaid,'paid amount removed from debt summary');
+ console.log('PASS documents: VAT, preview, access, atomic numbering, invoice/contract PDF, registry, workspace summary, actual shifts/overtime, payment status');
+ }catch(e){console.error(e);process.exitCode=1}finally{await new Promise(r=>server.close(r));fs.rmSync(temp,{recursive:true,force:true})}})();

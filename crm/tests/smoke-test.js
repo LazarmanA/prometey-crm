@@ -1,0 +1,64 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const os=require('node:os');
+const path=require('node:path');
+const temp=fs.mkdtempSync(path.join(os.tmpdir(),'prometey-test-'));
+process.env.DATA_FILE=path.join(temp,'data.json');
+fs.copyFileSync(path.join(__dirname,'../storage/data.demo.json'),process.env.DATA_FILE);
+const server=require('../server');
+let base,checks=0;
+async function req(p,token,method='GET',body){const r=await fetch(base+p,{method,headers:{'Content-Type':'application/json',...(token?{Authorization:'Bearer '+token}:{})},...(body?{body:JSON.stringify(body)}:{})});return {status:r.status,body:await r.json()}}
+function check(condition,label){assert.ok(condition,label);checks++;console.log('PASS',label)}
+(async()=>{try{
+ await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve)});base='http://127.0.0.1:'+server.address().port;
+ const d=(await req('/api/login',null,'POST',{email:'director@prometey.local',password:'director'})).body.token,m=(await req('/api/login',null,'POST',{email:'manager@prometey.local',password:'manager'})).body.token;
+ check(d&&m,'director and manager login');
+ check((await req('/api/orders',m)).body.length===1,'manager sees own orders');
+ check((await req('/api/orders/o2',m)).status===404,'foreign order hidden');
+ check((await req('/api/orders/o2',m,'PATCH',{name:'Intrusion'})).status===404,'foreign order edit rejected');
+ check((await req('/api/orders/o2/archive',m,'POST')).status===404,'foreign archive rejected');
+ check((await req('/api/clients?q=Монолит',m)).body.length===0,'company search scoped');
+ check((await req('/api/equipment',m,'POST',{ownership:'own'})).status===403,'manager cannot add own equipment');
+ const common={address:'Москва, Тестовая, 1',equipmentType:'Экскаватор',ownership:'rented',note:'Разработка котлована'};
+ for(const key of ['address','equipmentType','ownership','note','requestAt']){const b={...common,name:'Тестовая компания',requestAt:'2026-11-01T08:30'};delete b[key];check((await req('/api/clients',m,'POST',b)).status===400,'company requires '+key)}
+ const company=(await req('/api/clients',m,'POST',{...common,name:'Янтарь Тест',inn:'7701234567',phone:'+7 (999) 123-45-67',requestAt:'2026-11-01T08:30'})).body;
+ check(!!company.id,'company creation');
+ check((await req('/api/clients?q=9991234567',m)).body.some(x=>x.id===company.id),'normalized phone search');
+ const create={...common,name:'Котлован ноябрь',clientId:company.id,objectId:'obj1',start:'2026-11-01T08:30',end:'2026-11-04T17:00'};
+ for(const key of ['address','equipmentType','ownership','note','start']){const b={...create};delete b[key];check((await req('/api/orders',m,'POST',b)).status===400,'deal requires '+key)}
+ check((await req('/api/orders',m,'POST',{...create,objectId:'obj2'})).status===400,'foreign object rejected');
+ const order=(await req('/api/orders',m,'POST',create)).body;
+ check(!!order.id,'deal created');
+ check((await req('/api/orders/'+order.id,m,'PATCH',{name:'Изменённая заявка',note:'Обновлено'})).body.name==='Изменённая заявка','deal edit persists');
+ check((await req('/api/orders?q=9991234567',m)).body.some(x=>x.id===order.id),'deal search by company phone');
+ check((await req('/api/orders?q=7701234567',m)).body.some(x=>x.id===order.id),'deal search by company INN');
+ const line=(await req('/api/order-items',m,'POST',{orderId:order.id,equipmentId:'e3',unit:'shift',quantity:4,saleRate:1000,purchaseRate:600,extras:200,start:'2026-11-01',end:'2026-11-04'})).body;
+ check(!!line.id,'line creation');
+ check((await req('/api/order-items/'+line.id,m,'PATCH',{saleRate:1200})).body.saleRate===1200,'line editing');
+ check((await req('/api/order-items/'+line.id,m,'PATCH',{quantity:-1})).status===400,'negative quantity rejected');
+ let r=await req('/api/finance?from=2026-11-02&to=2026-11-03',m);
+ check(r.status===200&&r.body.totals.revenue===2400&&r.body.totals.cost===1300,'inclusive partial period correctly prorated');
+ check(r.body.equipment[0].revenue===2400,'turnover grouped by machine');
+ check((await req('/api/finance?from=2026-12-02&to=2026-11-03',m)).status===400,'reversed financial dates rejected');
+ check((await req('/api/finance?from=2026-12-02',m)).body.totals.revenue===0,'empty period totals zero');
+ const managerTotal=(await req('/api/finance',m)).body.totals.revenue,directorTotal=(await req('/api/finance',d)).body.totals.revenue;check(directorTotal>managerTotal,'director report includes all managers');
+ const a=(await req('/api/assignments',m,'POST',{objectId:'obj1',equipmentId:'e3',orderId:order.id,status:'working'})).body;
+ const shift=(await req('/api/shifts',m,'POST',{assignmentId:a.id,date:'2026-11-02',hours:8,unit:'shift',billableQuantity:1,saleRate:1500,purchaseRate:700,extras:100})).body;
+ check(!!shift.id,'priced shift creation');
+ r=await req('/api/finance?mode=actual&from=2026-11-02&to=2026-11-02',m);check(r.body.totals.revenue===1500&&r.body.totals.cost===800,'actual report uses recorded shift rates');
+ check((await req('/api/shifts/'+shift.id,m,'PATCH',{saleRate:1600})).body.saleRate===1600,'shift edit');
+ await req('/api/orders/'+order.id+'/archive',m,'POST');
+ check(!(await req('/api/orders',m)).body.some(x=>x.id===order.id),'archive hides active deal');
+ check((await req('/api/orders?archive=archived',m)).body.some(x=>x.id===order.id),'archived filter shows deal');
+ check((await req('/api/orders/'+order.id,m,'PATCH',{name:'Blocked'})).status===409,'archived edit requires restoration');
+ check((await req('/api/finance?from=2026-11-02&to=2026-11-03',m)).body.totals.revenue===2400,'archive keeps financial history');
+ await req('/api/orders/'+order.id+'/restore',m,'POST');check((await req('/api/orders',m)).body.some(x=>x.id===order.id),'restore deal');
+ await req('/api/clients/'+company.id+'/archive',m,'POST');check((await req('/api/clients?archive=archived',m)).body.some(x=>x.id===company.id),'archive company');
+ await req('/api/clients/'+company.id+'/restore',m,'POST');
+ const sorted=(await req('/api/clients?sort=name&dir=desc',m)).body;check(sorted[0].name==='Янтарь Тест','descending company sort');
+ check((await req('/api/map?ownership=own',d)).body.every(x=>x.ownership==='own'),'map ownership filter regression');
+ check((await req('/api/audit',m)).status===403,'audit permission regression');
+ const diskStore=new (require('../lib/database').Store)(process.env.DATA_FILE+'.sqlite',process.env.DATA_FILE);
+ check(diskStore.read().orders.some(o=>o.id===order.id&&o.name==='Изменённая заявка'),'disk persistence');diskStore.close();
+ console.log('\n'+checks+' checks passed; source data untouched.');
+ }catch(e){console.error(e);process.exitCode=1}finally{await new Promise(resolve=>server.close(resolve));fs.rmSync(temp,{recursive:true,force:true})}})();

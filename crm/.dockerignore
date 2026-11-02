@@ -1,0 +1,11 @@
+.git
+.gitignore
+node_modules
+backups
+storage/*.sqlite*
+storage/data.json
+storage/recordings
+storage/documents
+.env
+*.log
+PROMETEY_DEMO_*.html

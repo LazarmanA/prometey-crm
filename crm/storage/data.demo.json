@@ -1,0 +1,460 @@
+{
+  "users": [
+    {
+      "id": "u-director",
+      "name": "Андрей Руководитель",
+      "email": "director@prometey.local",
+      "password": "director",
+      "role": "director",
+      "privacyConsent": {
+        "version": "2026-11-02",
+        "at": "2026-10-13T08:00:00.000Z",
+        "ip": "demo",
+        "userAgent": "demo"
+      }
+    },
+    {
+      "id": "u-manager",
+      "name": "Иван Менеджер",
+      "email": "manager@prometey.local",
+      "password": "manager",
+      "role": "manager",
+      "privacyConsent": {
+        "version": "2026-11-02",
+        "at": "2026-10-13T08:00:00.000Z",
+        "ip": "demo",
+        "userAgent": "demo"
+      }
+    }
+  ],
+  "clients": [
+    {
+      "id": "c1",
+      "name": "ООО СтройПроект",
+      "inn": "7701234567",
+      "phone": "+7 900 111-22-33",
+      "email": "office@stroyproject.demo"
+    },
+    {
+      "id": "c2",
+      "name": "ООО Монолит Групп",
+      "inn": "7712345678",
+      "phone": "+7 900 444-55-66",
+      "email": "info@monolit.demo"
+    }
+  ],
+  "partners": [
+    {
+      "id": "p1",
+      "name": "ООО ТехРесурс",
+      "phone": "+7 901 200-00-01",
+      "rating": 4.8
+    },
+    {
+      "id": "p2",
+      "name": "ИП Соколов",
+      "phone": "+7 901 200-00-02",
+      "rating": 4.6
+    }
+  ],
+  "objects": [
+    {
+      "id": "obj1",
+      "name": "ЖК Северный",
+      "address": "Москва, Дмитровское шоссе, 167",
+      "managerId": "u-manager",
+      "lat": 55.9111,
+      "lng": 37.5445,
+      "status": "active",
+      "note": "Монолитные работы"
+    },
+    {
+      "id": "obj2",
+      "name": "Складской комплекс Юг",
+      "address": "Москва, Варшавское шоссе, 170",
+      "managerId": "u-director",
+      "lat": 55.5748,
+      "lng": 37.6069,
+      "status": "active",
+      "note": "Благоустройство и земляные работы"
+    }
+  ],
+  "equipment": [
+    {
+      "id": "e1",
+      "ownership": "own",
+      "type": "Экскаватор",
+      "model": "CAT 320",
+      "plate": "1234 МС 77",
+      "ownerName": "ПРОМЕТЕЙ ДЕМО",
+      "driver": "Петров А.А.",
+      "saleRate": 35000,
+      "purchaseRate": 0,
+      "status": "working",
+      "lat": 55.9115,
+      "lng": 37.5452,
+      "tracker": "GPS-001",
+      "year": 2022,
+      "hours": 4180
+    },
+    {
+      "id": "e2",
+      "ownership": "own",
+      "type": "Экскаватор-погрузчик",
+      "model": "JCB 3CX",
+      "plate": "Е406АУ797",
+      "ownerName": "ПРОМЕТЕЙ ДЕМО",
+      "driver": "Иванов С.С.",
+      "saleRate": 28000,
+      "purchaseRate": 0,
+      "status": "working",
+      "lat": 55.9104,
+      "lng": 37.5437,
+      "tracker": "GPS-002",
+      "year": 2021,
+      "hours": 5120
+    },
+    {
+      "id": "e3",
+      "ownership": "rented",
+      "type": "Автокран",
+      "model": "Клинцы 25 т",
+      "plate": "А295КК797",
+      "ownerName": "ООО ТехРесурс",
+      "partnerId": "p1",
+      "driver": "Кузнецов Ю.",
+      "saleRate": 42000,
+      "purchaseRate": 33000,
+      "status": "working",
+      "lat": 55.912,
+      "lng": 37.547,
+      "tracker": "",
+      "year": 2020,
+      "hours": 0
+    },
+    {
+      "id": "e4",
+      "ownership": "rented",
+      "type": "Самосвал",
+      "model": "КАМАЗ 6520",
+      "plate": "Х555ХХ799",
+      "ownerName": "ИП Соколов",
+      "partnerId": "p2",
+      "driver": "Соколов Н.В.",
+      "saleRate": 26000,
+      "purchaseRate": 21000,
+      "status": "working",
+      "lat": 55.9096,
+      "lng": 37.5462,
+      "tracker": "",
+      "year": 2019,
+      "hours": 0
+    },
+    {
+      "id": "e5",
+      "ownership": "rented",
+      "type": "Самосвал",
+      "model": "Shacman X3000",
+      "plate": "О777ОО790",
+      "ownerName": "ИП Соколов",
+      "partnerId": "p2",
+      "driver": "Орлов Д.Д.",
+      "saleRate": 27000,
+      "purchaseRate": 22000,
+      "status": "available",
+      "lat": 55.581,
+      "lng": 37.612,
+      "tracker": "",
+      "year": 2021,
+      "hours": 0
+    },
+    {
+      "id": "e6",
+      "ownership": "own",
+      "type": "Фронтальный погрузчик",
+      "model": "SDLG LG936",
+      "plate": "4567 МС 77",
+      "ownerName": "ПРОМЕТЕЙ ДЕМО",
+      "driver": "Сергеев И.И.",
+      "saleRate": 30000,
+      "purchaseRate": 0,
+      "status": "maintenance",
+      "lat": 55.5702,
+      "lng": 37.598,
+      "tracker": "GPS-006",
+      "year": 2020,
+      "hours": 6230
+    }
+  ],
+  "orders": [
+    {
+      "id": "o1",
+      "number": "PR-1001",
+      "clientId": "c1",
+      "objectId": "obj1",
+      "managerId": "u-manager",
+      "status": "working",
+      "start": "2026-10-12",
+      "end": "2026-10-18",
+      "note": "Комплекс техники на монолитные работы"
+    },
+    {
+      "id": "o2",
+      "number": "PR-1002",
+      "clientId": "c2",
+      "objectId": "obj2",
+      "managerId": "u-director",
+      "status": "planned",
+      "start": "2026-10-14",
+      "end": "2026-10-16",
+      "note": "Подготовка площадки"
+    }
+  ],
+  "orderItems": [
+    {
+      "id": "oi1",
+      "orderId": "o1",
+      "equipmentId": "e1",
+      "unit": "shift",
+      "quantity": 5,
+      "saleRate": 35000,
+      "purchaseRate": 18000,
+      "extras": 5000,
+      "note": "Условная внутренняя себестоимость собственной техники"
+    },
+    {
+      "id": "oi2",
+      "orderId": "o1",
+      "equipmentId": "e2",
+      "unit": "shift",
+      "quantity": 5,
+      "saleRate": 28000,
+      "purchaseRate": 15000,
+      "extras": 0,
+      "note": ""
+    },
+    {
+      "id": "oi3",
+      "orderId": "o1",
+      "equipmentId": "e3",
+      "unit": "shift",
+      "quantity": 3,
+      "saleRate": 42000,
+      "purchaseRate": 33000,
+      "extras": 6000,
+      "note": "Доставка"
+    },
+    {
+      "id": "oi4",
+      "orderId": "o1",
+      "equipmentId": "e4",
+      "unit": "shift",
+      "quantity": 3,
+      "saleRate": 26000,
+      "purchaseRate": 21000,
+      "extras": 0,
+      "note": ""
+    },
+    {
+      "id": "oi5",
+      "orderId": "o2",
+      "equipmentId": "e5",
+      "unit": "shift",
+      "quantity": 2,
+      "saleRate": 27000,
+      "purchaseRate": 22000,
+      "extras": 4000,
+      "note": "Подача"
+    }
+  ],
+  "assignments": [
+    {
+      "id": "a1",
+      "objectId": "obj1",
+      "orderId": "o1",
+      "equipmentId": "e1",
+      "start": "2026-10-12T08:00",
+      "end": "2026-10-18T20:00",
+      "status": "working",
+      "details": "Котлован, 8 часов"
+    },
+    {
+      "id": "a2",
+      "objectId": "obj1",
+      "orderId": "o1",
+      "equipmentId": "e2",
+      "start": "2026-10-12T08:00",
+      "end": "2026-10-18T20:00",
+      "status": "working",
+      "details": "Погрузка и планировка"
+    },
+    {
+      "id": "a3",
+      "objectId": "obj1",
+      "orderId": "o1",
+      "equipmentId": "e3",
+      "start": "2026-10-13T08:00",
+      "end": "2026-10-15T20:00",
+      "status": "working",
+      "details": "Монтаж арматуры"
+    },
+    {
+      "id": "a4",
+      "objectId": "obj1",
+      "orderId": "o1",
+      "equipmentId": "e4",
+      "start": "2026-10-13T08:00",
+      "end": "2026-10-15T20:00",
+      "status": "working",
+      "details": "Вывоз грунта"
+    },
+    {
+      "id": "a5",
+      "objectId": "obj2",
+      "orderId": "o2",
+      "equipmentId": "e5",
+      "start": "2026-10-14T08:00",
+      "end": "2026-10-16T20:00",
+      "status": "planned",
+      "details": "Поставка инертных материалов"
+    }
+  ],
+  "shifts": [
+    {
+      "id": "s1",
+      "assignmentId": "a1",
+      "date": "2026-10-12",
+      "hours": 8,
+      "downtime": 0,
+      "overtime": 1,
+      "comment": "Смена закрыта без замечаний"
+    },
+    {
+      "id": "s2",
+      "assignmentId": "a2",
+      "date": "2026-10-12",
+      "hours": 8,
+      "downtime": 1,
+      "overtime": 0,
+      "comment": "Простой 1 час из-за допуска на объект"
+    }
+  ],
+  "modules": [
+    {
+      "id": "core",
+      "name": "Базовая CRM",
+      "description": "Клиенты, объекты, техника, заказы, смены",
+      "price": 0,
+      "enabled": true,
+      "commercial": false
+    },
+    {
+      "id": "onec",
+      "name": "Прометей Connect · 1С",
+      "description": "Обмен контрагентами, документами, оплатами и задолженностью",
+      "price": 2990,
+      "enabled": false,
+      "commercial": true
+    },
+    {
+      "id": "ai",
+      "name": "Prometey AI",
+      "description": "Помощник по технике, заказам, документам и аналитике",
+      "price": 1990,
+      "enabled": false,
+      "commercial": true
+    },
+    {
+      "id": "gps",
+      "name": "GPS / ГЛОНАСС",
+      "description": "Живые координаты, история перемещений, геозоны",
+      "price": 1990,
+      "enabled": true,
+      "commercial": true
+    },
+    {
+      "id": "telephony",
+      "name": "Телефония",
+      "description": "Звонки, записи, карточки клиентов, лиды",
+      "price": 990,
+      "enabled": false,
+      "commercial": true
+    },
+    {
+      "id": "edo",
+      "name": "ЭДО",
+      "description": "Диадок / СБИС, отправка и статусы документов",
+      "price": 1490,
+      "enabled": false,
+      "commercial": true
+    },
+    {
+      "id": "analytics",
+      "name": "Расширенная аналитика",
+      "description": "Рентабельность техники, менеджеров, объектов и клиентов",
+      "price": 990,
+      "enabled": true,
+      "commercial": true
+    },
+    {
+      "id": "documents",
+      "name": "Документы",
+      "description": "Счета, договоры, реестр и PDF",
+      "price": 0,
+      "enabled": true,
+      "commercial": false
+    }
+  ],
+  "audit": [
+    {
+      "id": "log1",
+      "at": "2026-10-13T08:10:00.000Z",
+      "userId": "u-director",
+      "action": "demo.seed",
+      "entity": "system",
+      "entityId": "seed",
+      "details": "Созданы демонстрационные данные"
+    }
+  ],
+  "sessions": [],
+  "legalEntities": [
+    {
+      "id": "le-demo",
+      "name": "ООО ПРОМЕТЕЙ ДЕМО",
+      "shortName": "ПРОМЕТЕЙ ДЕМО",
+      "inn": "7700000000",
+      "kpp": "770001001",
+      "address": "г. Москва, демонстрационный адрес",
+      "bankAccount": "40702810000000000001",
+      "bankName": "Демо Банк",
+      "bik": "044525000",
+      "correspondentAccount": "30101810000000000000",
+      "signatoryName": "Андрей Руководитель",
+      "signatoryPosition": "Генеральный директор",
+      "vatRate": 22
+    }
+  ],
+  "documents": [],
+  "documentSequences": [],
+  "documentVersions": [],
+  "leads": [],
+  "roles": [],
+  "departments": [],
+  "realizations": [],
+  "payments": [],
+  "feed": [
+    {
+      "id": "post-welcome",
+      "kind": "system",
+      "authorId": "",
+      "text": "Добро пожаловать в ленту ПРОМЕТЕЯ! Здесь публикуются новости компании — их видят все сотрудники.\nОтмечайте сообщение как «Важное», чтобы коллеги подтвердили прочтение.",
+      "important": false,
+      "pinned": true,
+      "createdAt": "2026-10-01T09:00:00.000Z",
+      "likes": [],
+      "comments": [],
+      "readBy": []
+    }
+  ],
+  "templates": []
+}

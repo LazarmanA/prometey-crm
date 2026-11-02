@@ -1,0 +1,22 @@
+const assert=require('node:assert/strict');
+const {createIntegrations,snapshot}=require('../lib/integrations');
+const data=require('../storage/data.demo.json');
+const env={PROMETEY_SOURCE_ID:'test-instance',BITRIX24_WEBHOOK:'https://example.bitrix24.ru/rest/1/secret/',ONEC_EXCHANGE_URL:'https://onec.example/hs/prometey/',ONEC_TOKEN:'secret-token'};
+let calls=[],records={},next=1,broken=false;
+const transport=async(url,opts)=>{const body=JSON.parse(opts.body);calls.push({url,body,opts});if(broken)throw new Error('secret-token');if(url.endsWith('/health'))return {ok:true,json:async()=>({schema:'prometey.exchange.v1',ok:true})};if(url.endsWith('/exchange'))return {ok:true,json:async()=>({ok:true,requestId:body.requestId})};const [,kind,method]=url.match(/crm\.(company|deal)\.(list|add|update)\.json$/);let result;if(method==='list')result=Object.entries(records).filter(([,r])=>r.kind===kind&&r.ORIGIN_ID===body.filter['=ORIGIN_ID']&&r.ORIGINATOR_ID===body.filter['=ORIGINATOR_ID']).map(([ID])=>({ID}));if(method==='add'){result=String(next++);records[result]={kind,...body.fields}}if(method==='update'){records[body.id]={...records[body.id],...body.fields};result=true}return {ok:true,json:async()=>({result})}};
+const api=createIntegrations({env,transport}),director={id:'director',role:'director'},manager={id:'manager',role:'manager'};
+const run=(route,body={},user=director,method='POST',source=data)=>api(user,method,new URL('https://app/api/integrations'+route),body,source);
+(async()=>{
+ await assert.rejects(run('',{},manager,'GET'),e=>e.status===403);
+ const status=await run('',{},director,'GET');assert(!JSON.stringify(status).includes('secret'));
+ let plan=await run('/bitrix24/preview');assert.equal(calls.length,0);assert.equal(plan.payload.companies.length,2);
+ const first=await run('/bitrix24/send',{previewId:plan.id});assert.equal(first.completed,4);assert.equal(Object.keys(records).length,4);
+ const deal=Object.values(records).find(x=>x.kind==='deal');const local=data.orders.find(x=>deal.ORIGIN_ID===x.id);assert.equal(deal.OPPORTUNITY,data.orderItems.filter(x=>x.orderId===local.id).reduce((s,i)=>s+i.quantity*i.saleRate,0));assert(!('STAGE_ID'in deal));
+ await assert.rejects(run('/bitrix24/send',{previewId:plan.id}),e=>e.status===409);
+ plan=await run('/bitrix24/preview');await run('/bitrix24/send',{previewId:plan.id});assert.equal(Object.keys(records).length,4,'repeat export must update, not duplicate');
+ plan=await run('/bitrix24/preview');const changed=structuredClone(data);changed.clients[0].name='changed';await assert.rejects(run('/bitrix24/send',{previewId:plan.id},director,'POST',changed),e=>e.status===409);
+ await run('/onec/test');plan=await run('/onec/preview');await run('/onec/send',{previewId:plan.id});assert.equal(calls.at(-1).opts.headers.Authorization,'Bearer secret-token');
+ broken=true;await assert.rejects(run('/onec/test'),e=>e.status===502&&!e.message.includes('secret'));
+ const archived=structuredClone(data);archived.clients[0].archivedAt='now';assert(!snapshot(archived).companies.some(c=>c.id===data.clients[0].id));
+ console.log('PASS integration access, secret redaction, preview isolation, remote upsert, totals, replay, stale preview, 1C acknowledgement, errors, archive');
+})().catch(e=>{console.error(e);process.exitCode=1});

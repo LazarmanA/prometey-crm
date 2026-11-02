@@ -1,0 +1,13 @@
+node_modules/
+.env
+.env.*
+!.env.example
+storage/*.sqlite
+storage/*.sqlite-*
+storage/data.json
+storage/recordings/
+storage/documents/
+storage/backups/
+backups/
+*.log
+.DS_Store

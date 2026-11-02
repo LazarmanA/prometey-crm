@@ -1,0 +1,12 @@
+{
+  "name": "prometey-vendor-console",
+  "version": "1.5.0",
+  "private": true,
+  "description": "ПРОМЕТЕЙ · Пульт продавца: установки CRM, подписки, оплаты, состояние сервисов",
+  "main": "server.js",
+  "engines": {"node": ">=22.5"},
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning server.js",
+    "test": "node tests/vendor-test.js"
+  }
+}
