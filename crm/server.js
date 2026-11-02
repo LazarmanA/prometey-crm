@@ -118,7 +118,7 @@ async function api(req,res,url){
  if(avitoHook){if(req.method!=='POST')return json(res,405,{error:'Требуется POST'});return json(res,200,Avito.webhook(avitoHook[1],await readBody(req,64*1024)))}
  const webhook=url.pathname.match(/^\/api\/telephony\/webhooks\/([a-z][a-z0-9_-]{0,39})$/);
  if(webhook){telephony.authorize(req,webhook[1]);if(req.method!=='POST')return json(res,405,{error:'Требуется POST'});return json(res,200,telephony.ingest(webhook[1],await readBody(req)))}
- if(url.pathname==='/api/config'&&req.method==='GET')return json(res,200,{yandexMapsApiKey:process.env.YANDEX_MAPS_API_KEY||config.yandexMapsApiKey||'',version:VERSION});
+ if(url.pathname==='/api/config'&&req.method==='GET')return json(res,200,{yandexMapsApiKey:process.env.YANDEX_MAPS_API_KEY||config.yandexMapsApiKey||'',version:VERSION,installer:process.env.PROMETEY_ADMIN_MUST_CHANGE==='1'});
  const recordingRoute=url.pathname.match(/^\/api\/calls\/(clients|orders)\/([^/]+)\/([^/]+)\/recording$/);
  const needsBody=!recordingRoute&&['POST','PATCH','PUT'].includes(req.method);const bigBody=url.pathname==='/api/templates'||url.pathname.startsWith('/api/templates/')||url.pathname==='/api/files/logo';
  const body=needsBody?await readBody(req,bigBody?16*1024*1024:undefined):{};
