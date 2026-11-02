@@ -79,8 +79,16 @@ Ok "Файлы на сервере"
 Info "Запускаю установку на сервере (2/2). Это займёт 5–15 минут…"
 $remote = "sed -i 's/\r`$//' /root/install-server.sh && bash /root/install-server.sh --archive /root/prometey.tgz"
 if ($user -ne 'root') { $remote = "sudo bash -c `"$remote`"" }
-& ssh -t @sshOpts $target $remote
-if ($LASTEXITCODE -ne 0) { Fail "Установка завершилась с ошибкой. Сделайте снимок экрана и пришлите его." }
+# Сервер в интернете иногда не отвечает с первого раза (его «простукивают» боты) — пробуем до 5 раз.
+for ($try = 1; $try -le 5; $try++) {
+  & ssh -t @sshOpts $target $remote
+  $code = $LASTEXITCODE
+  if ($code -eq 0) { break }
+  if ($code -ne 255 -or $try -eq 5) { Fail "Установка завершилась с ошибкой. Сделайте снимок экрана и пришлите его." }
+  Write-Host ""
+  Info "Сервер не ответил — повторяю через 10 секунд ($($try+1)/5). Когда спросят password: — снова правая кнопка мыши и Enter."
+  Start-Sleep -Seconds 10
+}
 
 Write-Host ""
 Ok "Готово! Адрес CRM показан выше в зелёной рамке."
