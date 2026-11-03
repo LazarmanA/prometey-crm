@@ -110,13 +110,17 @@ if [[ $MEM_MB -lt 2500 ]] && ! swapon --show | grep -q .; then
 fi
 
 # брандмауэр: сначала разрешаем SSH на том порту, где он реально работает
-SSH_PORTS=$(ss -ltnpH 2>/dev/null | awk '/sshd/{n=split($4,a,":"); print a[n]}' | sort -u)
+# порт текущего подключения + порты из настроек sshd (в Ubuntu 24.04 порт слушает systemd, а не sshd)
+SSH_PORTS=$( { echo "${SSH_CONNECTION:-} " | awk '{print $4}'; sshd -T 2>/dev/null | awk '/^port /{print $2}'; ss -ltnpH 2>/dev/null | awk '/sshd/{n=split($4,a,":"); print a[n]}'; } | grep -E '^[0-9]+$' | sort -u)
 [[ -z "$SSH_PORTS" ]] && SSH_PORTS=22
 for p in $SSH_PORTS; do ufw allow "$p/tcp" >/dev/null; done
 ufw allow 80/tcp >/dev/null
 ufw allow 443/tcp >/dev/null
 ufw --force enable >/dev/null
+mkdir -p /etc/fail2ban/jail.d
+printf '[sshd]\nenabled = true\nport = %s\nmaxretry = 6\nbantime = 1h\n' "$(echo $SSH_PORTS | tr ' ' ',')" > /etc/fail2ban/jail.d/prometey-sshd.conf
 systemctl enable --now fail2ban >/dev/null 2>&1 || true
+systemctl restart fail2ban >/dev/null 2>&1 || true
 c_ok "Брандмауэр включён: открыты только SSH ($SSH_PORTS), 80 и 443"
 
 # =====================================================================

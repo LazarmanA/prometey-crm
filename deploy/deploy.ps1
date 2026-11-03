@@ -33,8 +33,8 @@ Ok "Папка проекта: $proj"
 
 # --- адрес сервера: берём из server.txt, лишних вопросов не задаём ---
 $cfg = Join-Path $here 'server.txt'
-$ip = ''; $user = 'root'
-if (Test-Path $cfg) { $l = @(Get-Content $cfg); if ($l.Count -gt 0) { $ip = "$($l[0])".Trim() }; if ($l.Count -gt 1 -and "$($l[1])".Trim()) { $user = "$($l[1])".Trim() } }
+$ip = ''; $user = 'root'; $port = '22'
+if (Test-Path $cfg) { $l = @(Get-Content $cfg); if ($l.Count -gt 0) { $ip = "$($l[0])".Trim() }; if ($l.Count -gt 1 -and "$($l[1])".Trim()) { $user = "$($l[1])".Trim() }; if ($l.Count -gt 2 -and "$($l[2])".Trim() -match '^\d{1,5}$') { $port = "$($l[2])".Trim() } }
 # защита от случайно вписанного пароля: адрес — только цифры и точки (или домен), пользователь — латиница в нижнем регистре
 if ($ip -notmatch '^(\d{1,3}\.){3}\d{1,3}$' -and $ip -notmatch '^[a-z0-9.-]+\.[a-z]{2,}$') { $ip = '' }
 if ($user -cnotmatch '^(root|ubuntu|admin)$') { $user = 'root' }  # на серверах Рег.облака вход всегда root
@@ -42,8 +42,8 @@ if (-not $ip) {
   $ip = (Read-Host "Введите IP-адрес сервера (например 89.108.70.182)").Trim()
   if ($ip -notmatch '^(\d{1,3}\.){3}\d{1,3}$' -and $ip -notmatch '^[a-z0-9.-]+\.[a-z]{2,}$') { Fail "'$ip' — это не IP-адрес. IP выглядит так: 89.108.70.182" }
 }
-Set-Content -Path $cfg -Value @($ip, $user) -Encoding ASCII
-Ok "Сервер: $user@$ip"
+Set-Content -Path $cfg -Value @($ip, $user, $port) -Encoding ASCII
+Ok "Сервер: $user@$ip (порт $port)"
 
 $installer = Join-Path $here 'install-server.sh'
 if (-not (Test-Path $installer)) { Fail "Рядом нет файла install-server.sh — положите его в ту же папку." }
@@ -59,7 +59,7 @@ if ($LASTEXITCODE -ne 0) { Fail "Не удалось упаковать папк
 Ok ("Архив готов: {0:N1} МБ" -f ((Get-Item $arch).Length / 1MB))
 
 $target = "$user@$ip"
-$base = @('-o','StrictHostKeyChecking=accept-new','-o','ServerAliveInterval=30','-o','ConnectTimeout=25')
+$base = @('-o',"Port=$port",'-o','StrictHostKeyChecking=accept-new','-o','ServerAliveInterval=30','-o','ConnectTimeout=25')
 
 # --- ключ доступа: пароль root вводится ОДИН раз, дальше вход по ключу ---
 $sshDir = Join-Path $env:USERPROFILE '.ssh'
