@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -34,6 +35,8 @@ type Progress struct {
 	URL      string   `json:"url"`
 	Login    string   `json:"login"`
 	Password string   `json:"password"` // временный пароль — только если выдан сейчас
+	Setup    bool     `json:"setup"`    // новая установка: руководитель создаёт учётную запись в CRM
+	LAN      string   `json:"lan"`      // адрес для коллег в офисной сети
 	Updated  bool     `json:"updated"`
 	Warnings []string `json:"warnings"`
 }
@@ -61,7 +64,7 @@ func (p *Progress) snapshot() []byte {
 	return b
 }
 
-var installSteps = []string{"Подготовка", "Node.js", "Файлы программы", "Настройки", "Автозапуск и ярлыки", "Запуск"}
+var installSteps = []string{"Подготовка", "Node.js", "Файлы программы", "Настройки", "Доступ из офисной сети", "Автозапуск и ярлыки", "Запуск"}
 
 // tempPassword: 4 группы по 4 символа без похожих букв (l/1, O/0), есть строчные, заглавные и цифры.
 func tempPassword() string {
@@ -274,9 +277,10 @@ func install(L Layout, p *Progress) {
 	} else {
 		port = freePort(3030)
 	}
-	host := env["HOST"]
-	if host == "" {
-		host = "127.0.0.1" // доступ из офисной сети включается в CRM: «Администрирование → Сервер»
+	// Коллеги в офисе открывают CRM по адресу компьютера в сети. Выключить можно в CRM: «Администрирование → Сервер».
+	host := "0.0.0.0"
+	if env["PROMETEY_NETWORK"] == "off" {
+		host = "127.0.0.1"
 	}
 	upd := map[string]string{
 		"NODE_ENV": "production", "HOST": host, "PORT": strconv.Itoa(port), "COOKIE_SECURE": "false", "SESSION_TTL_HOURS": "12",
@@ -296,14 +300,15 @@ func install(L Layout, p *Progress) {
 			remove = append(remove, key)
 		}
 	}
-	password := ""
+	// Новая установка: никаких временных паролей — руководитель сам создаёт учётную запись в CRM,
+	// остальных приглашает ссылкой. Прежние установки с паролем из установщика продолжают работать как раньше.
+	password, setupToken := "", ""
 	if env["PROMETEY_ADMIN_PASSWORD"] == "" {
-		password = tempPassword()
-		email := env["PROMETEY_ADMIN_EMAIL"]
-		if email == "" {
-			email = "admin@prometey.local"
+		setupToken = env["PROMETEY_SETUP_TOKEN"]
+		if setupToken == "" || existing == nil {
+			setupToken = randomToken()
 		}
-		upd["PROMETEY_ADMIN_EMAIL"], upd["PROMETEY_ADMIN_PASSWORD"], upd["PROMETEY_ADMIN_MUST_CHANGE"] = email, password, "1"
+		upd["PROMETEY_SETUP"], upd["PROMETEY_SETUP_TOKEN"] = "1", setupToken
 	}
 	if err := writeEnv(L.Env, upd, remove); err != nil {
 		fail(err)
@@ -316,7 +321,27 @@ func install(L Layout, p *Progress) {
 	}
 	next(fmt.Sprintf("порт %d", port))
 
-	// 5. Автозапуск и ярлыки — для текущего пользователя, без прав администратора
+	// 5. Доступ из офисной сети: правило брандмауэра Windows (один вопрос «Разрешить?»)
+	lan := ""
+	if host == "0.0.0.0" {
+		run("Windows спросит разрешение — нажмите «Да»")
+		if ips := lanIPs(); len(ips) > 0 {
+			lan = fmt.Sprintf("http://%s:%d/", ips[0], port)
+		}
+		if err := allowFirewall(L, port); err != nil {
+			p.set(step, "warn", err.Error())
+			p.warn("Коллеги в офисе пока не смогут открыть CRM: брандмауэр Windows не настроен (" + err.Error() + "). Запустите установщик ещё раз и в окне Windows нажмите «Да».")
+			step++
+		} else if lan != "" {
+			next("коллеги открывают " + lan)
+		} else {
+			next("компьютер пока не подключён к локальной сети")
+		}
+	} else {
+		next("выключен в CRM")
+	}
+
+	// 6. Автозапуск и ярлыки — для текущего пользователя, без прав администратора
 	run("")
 	shortcuts, err := integrate(L, port)
 	info.Shortcuts = shortcuts
@@ -332,7 +357,7 @@ func install(L Layout, p *Progress) {
 		next("запуск вместе с Windows, ярлык на рабочем столе")
 	}
 
-	// 6. Запуск и проверка
+	// 7. Запуск и проверка
 	run("запускаю…")
 	if err := startCRM(L); err != nil {
 		fail(fmt.Errorf("не удалось запустить CRM: %v", err))
@@ -349,23 +374,24 @@ func install(L Layout, p *Progress) {
 
 	p.mu.Lock()
 	p.URL = fmt.Sprintf("http://localhost:%d/", port)
+	p.Setup, p.LAN = setupToken != "" && setupPending(port), lan
+	if p.Setup {
+		p.URL += "#setup=" + setupToken
+	}
 	p.Login, p.Password, p.Done = info.AdminEmail, password, true
 	p.mu.Unlock()
 }
 
-// resetAdminPassword выдаёт новый временный пароль руководителя (если его забыли) и перезапускает CRM.
+// resetAdminPassword: руководитель забыл пароль — CRM открывается на этом компьютере со страницей,
+// где он заново задаёт e-mail и пароль (данные не меняются). Возвращает адрес этой страницы.
 func resetAdminPassword(L Layout) (string, string, error) {
 	info, err := readInfo(L)
 	if err != nil {
 		return "", "", errors.New("ПРОМЕТЕЙ не установлен")
 	}
-	pass := tempPassword()
-	env, _ := readEnv(L.Env)
-	email := env["PROMETEY_ADMIN_EMAIL"]
-	if email == "" {
-		email = "admin@prometey.local"
-	}
-	if err := writeEnv(L.Env, map[string]string{"PROMETEY_ADMIN_EMAIL": email, "PROMETEY_ADMIN_PASSWORD": pass, "PROMETEY_ADMIN_MUST_CHANGE": "1"}, nil); err != nil {
+	token := randomToken()
+	if err := writeEnv(L.Env, map[string]string{"PROMETEY_SETUP": "1", "PROMETEY_SETUP_TOKEN": token, "PROMETEY_RESET_OWNER": token},
+		[]string{"PROMETEY_ADMIN_EMAIL", "PROMETEY_ADMIN_PASSWORD", "PROMETEY_ADMIN_MUST_CHANGE"}); err != nil {
 		return "", "", err
 	}
 	stopCRM(L)
@@ -375,7 +401,28 @@ func resetAdminPassword(L Layout) (string, string, error) {
 	if err := waitHealthy(info.Port, 90*time.Second); err != nil {
 		return "", "", fmt.Errorf("CRM не запустилась: %v", err)
 	}
-	return email, pass, nil
+	return fmt.Sprintf("http://localhost:%d/#setup=%s", info.Port, token), "", nil
+}
+
+func randomToken() string {
+	b := make([]byte, 18)
+	rand.Read(b)
+	return base64.RawURLEncoding.EncodeToString(b)
+}
+
+// setupPending: CRM ждёт, что руководитель создаст учётную запись.
+func setupPending(port int) bool {
+	c := http.Client{Timeout: 3 * time.Second}
+	resp, err := c.Get(fmt.Sprintf("http://127.0.0.1:%d/api/setup", port))
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	var s struct {
+		Needed bool `json:"needed"`
+	}
+	json.NewDecoder(resp.Body).Decode(&s)
+	return s.Needed
 }
 
 type BackupItem struct {

@@ -16,6 +16,7 @@ const backend=[
  ['Подписка и пульт продавца','tests/license-test.js'],
  ['Авито → Лиды','tests/avito-test.js'],
  ['Согласие с политикой ПДн, список e-mail','tests/privacy-test.js'],
+ ['Команда: регистрация, приглашения, файлы в ленте','tests/team-test.js'],
  ['Производительность API','tests/performance-test.js']
 ];
 const browser=[
@@ -31,7 +32,8 @@ const browser=[
  ['UI: защита от XSS','tests/xss-browser-test.js'],
  ['UI: лента, администрирование, бухгалтерия','tests/office-browser-test.js'],
  ['UI: перетаскивание файлов','tests/files-browser-test.js'],
- ['UI: вход, согласие, почта, Авито','tests/onboarding-browser-test.js']
+ ['UI: вход, согласие, почта, Авито','tests/onboarding-browser-test.js'],
+ ['UI: регистрация, приглашение, файлы в ленте','tests/team-browser-test.js']
 ];
 const suites=noBrowser?backend:[...backend,...browser];
 const results=[];

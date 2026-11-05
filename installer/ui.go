@@ -116,12 +116,12 @@ func serveUI(L Layout, opt uiOptions) {
 			fail(w, "дождитесь окончания установки")
 			return
 		}
-		email, pass, err := resetAdminPassword(L)
+		url, _, err := resetAdminPassword(L)
 		if err != nil {
 			fail(w, err.Error())
 			return
 		}
-		reply(w, map[string]string{"login": email, "password": pass})
+		reply(w, map[string]string{"url": url})
 	})
 
 	srv := &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}

@@ -36,7 +36,26 @@
 .temp-pass{font:700 22px/1.3 ui-monospace,Menlo,Consolas,monospace;letter-spacing:.06em;background:#f8fafc;border:1px dashed #98a2b3;border-radius:12px;padding:14px;text-align:center;margin:12px 0;user-select:all}
 /* Лента */
 .feed-wrap{max-width:860px}
-.feed-compose{padding:16px;margin-bottom:16px}
+.feed-compose{padding:16px;margin-bottom:16px;position:relative}
+.feed-compose .feed-clip{cursor:pointer;margin:0}
+.feed-attach{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.attach-chip{display:inline-flex;align-items:center;gap:8px;max-width:100%;border:1px solid var(--line,#e4e7ec);border-radius:10px;padding:6px 6px 6px 10px;background:var(--surface-2,#f8fafc);font-size:13px}
+.attach-chip .file-nm{max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.attach-chip.err{border-color:#fecdca;background:#fef3f2;color:#b42318}.attach-chip.up{opacity:.75}
+.attach-chip button{border:0;background:none;cursor:pointer;font-size:16px;line-height:1;padding:0 4px;color:inherit}
+.feed-drop{display:none;position:absolute;inset:0;border:2px dashed var(--accent,#ea5b0c);border-radius:inherit;background:rgba(234,91,12,.08);align-items:center;justify-content:center;font-weight:700;color:var(--accent,#ea5b0c);pointer-events:none}
+.feed-compose.dragging .feed-drop{display:flex}
+.post-images{display:grid;gap:6px;margin:10px 0;border-radius:12px;overflow:hidden;max-width:640px}
+.post-images.n1{grid-template-columns:1fr}.post-images.n2,.post-images.n4{grid-template-columns:1fr 1fr}.post-images.n3{grid-template-columns:repeat(3,1fr)}
+.post-images a{display:block;background:var(--surface-2,#f2f4f7)}
+.post-images img{display:block;width:100%;height:100%;max-height:420px;object-fit:cover}
+.post-images.n1 img{object-fit:contain;max-height:480px}
+.post-images:not(.n1) img{aspect-ratio:4/3}
+.post-files{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+.file-chip{display:inline-flex;align-items:center;gap:10px;max-width:100%;border:1px solid var(--line,#e4e7ec);border-radius:12px;padding:8px 12px 8px 8px;text-decoration:none;color:inherit;background:var(--surface,#fff)}
+.file-chip:hover{border-color:var(--accent,#ea5b0c)}
+.file-chip .file-ic{flex:none;min-width:38px;height:38px;padding:0 4px;border-radius:9px;background:var(--accent-soft,#fff1e8);color:var(--accent,#ea5b0c);display:grid;place-items:center;font:800 11px/1 system-ui,sans-serif}
+.file-chip .file-nm{font-weight:600;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .feed-compose textarea{min-height:84px;resize:vertical}
 .feed-compose .row{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap}
 .post{padding:16px 18px;margin-bottom:12px}
@@ -57,3 +76,11 @@
 .comment .who{font-weight:700;font-size:13px}.comment .when{color:var(--muted);font-size:11px;margin-left:6px}
 .comment-form{display:flex;gap:8px;margin-top:8px}.comment-form input{flex:1}
 @media(max-width:760px){.grid-2c{grid-template-columns:1fr}.perm-grid{grid-template-columns:1fr}.kpi-grid.k4{grid-template-columns:1fr 1fr}.toolbar-row .form-group{flex:1 1 140px}}
+
+/* Регистрация и приглашения */
+.pw-checks{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:2px;font-size:13px;color:var(--muted,#667085)}
+.pw-checks li::before{content:'○ '}.pw-checks li.ok{color:#067647}.pw-checks li.ok::before{content:'✓ ';font-weight:800}.pw-checks li.bad{color:#b42318}.pw-checks li.bad::before{content:'! '}
+.ob-demo{display:flex;gap:8px;align-items:flex-start;font-weight:400!important;margin-top:16px!important}.ob-demo input{margin-top:3px}
+.invite-panel{padding:16px;margin-bottom:16px;display:grid;gap:12px}
+.invite-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.invite-link{font:600 15px/1.4 Consolas,ui-monospace,monospace;background:#f8fafc;border:1px dashed #98a2b3;border-radius:10px;padding:12px;margin:10px 0;word-break:break-all;user-select:all}

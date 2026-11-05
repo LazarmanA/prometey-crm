@@ -21,6 +21,8 @@ func hideWindow(cmd *exec.Cmd) {}
 func integrate(L Layout, port int) ([]string, error) {
 	return nil, nil
 }
+func allowFirewall(L Layout, port int) error { return nil }
+
 func openBrowser(url string) error {
 	fmt.Println("Откройте в браузере:", url)
 	return nil

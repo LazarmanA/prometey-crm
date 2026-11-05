@@ -43,6 +43,8 @@ function bootstrapPasswords(store,env=process.env){
    const current=String(user.passwordHash||user.password||'');
    const defaultPassword=role==='director'?'director':role==='manager'?'manager':'';
    const stillDefault=!!defaultPassword&&verifyPassword(current,defaultPassword);
+   // Режим первой регистрации (установщик для Windows): руководитель сам создаёт учётную запись в CRM, демо-входы закрыты (lib/onboarding.js).
+   if(env.PROMETEY_SETUP==='1'&&role&&(!override.email||!override.password)){if(!isHash(current)&&current){user.passwordHash=hashPassword(current);delete user.password;changed=true}continue}
    // Менеджер из настроек сервера необязателен: если его не задали, демо-менеджер отключается (вход manager/manager невозможен),
    // а сотрудников руководитель добавляет в «Администрировании».
    if(production&&role==='manager'&&(!override.email||!override.password)){

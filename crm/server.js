@@ -10,14 +10,15 @@ const Documents=require('./lib/documents');
 const {pdfEngine}=require('./lib/pdf');
 const integrations=require('./lib/integrations').createIntegrations();
 const adminApi=require('./lib/admin').createAdmin();
-const feedApi=require('./lib/feed').createFeed({settings:require('./lib/admin').settings});
 const ROOT=__dirname,PUBLIC=path.join(ROOT,'public');
 const DATA_FILE=process.env.DATA_FILE||path.join(ROOT,'storage/data.demo.json');
 const DB_FILE=process.env.DB_FILE||(process.env.DATA_FILE?DATA_FILE+'.sqlite':path.join(ROOT,'storage/prometey.sqlite'));
 const DOCUMENTS_DIR=process.env.DOCUMENTS_DIR||path.join(path.dirname(DB_FILE),'documents');
 const store=new (require('./lib/database').Store)(DB_FILE,DATA_FILE);
 const UPLOADS_DIR=process.env.UPLOADS_DIR||path.join(path.dirname(DB_FILE),'uploads');
-const Files=require('./lib/files').createFiles({dir:UPLOADS_DIR});Documents.configure({files:Files});
+const Files=require('./lib/files').createFiles({dir:UPLOADS_DIR});
+const Feed=require('./lib/feed'),feedApi=Feed.createFeed({settings:require('./lib/admin').settings,dir:UPLOADS_DIR});Documents.configure({files:Files});
+const Onboarding=require('./lib/onboarding').createOnboarding();store.transaction(d=>({changed:Onboarding.prepare(d)}));
 Security.bootstrapPasswords(store,process.env);
 const recordingHandler=require('./lib/recordings').createRecordings(store,CRM,process.env.RECORDINGS_DIR||path.join(path.dirname(DB_FILE),'recordings'));
 const telephony=require('./lib/telephony').createTelephony(store,process.env,process.env.RECORDINGS_DIR||path.join(path.dirname(DB_FILE),'recordings'));
@@ -56,6 +57,13 @@ function loginSucceeded(req,email){limits.loginPair.reset(loginKeys(req,email).p
 function currentSession(req,data){const raw=(req.headers.authorization||'').replace(/^Bearer\s+/,'')||Security.cookieToken(req);if(!raw)return null;const hash=Security.tokenHash(raw),now=Date.now();const session=(data.sessions||[]).find(s=>s.tokenHash===hash&&Date.parse(s.expiresAt)>now);if(!session)return null;const user=data.users.find(u=>u.id===session.userId);if(!user||user.disabled)return null;user.perms=Access.perms(data,user);return {raw,session,user}}
 function authenticate(req){const data=store.read(),auth=currentSession(req,data);if(!auth)throw Object.assign(new Error('Требуется вход'),{status:401});return {...auth,data}}
 function pruneSessions(data){const now=Date.now();data.sessions=(data.sessions||[]).filter(s=>Date.parse(s.expiresAt)>now);if(data.sessions.length>5000)data.sessions=data.sessions.slice(-5000)}
+
+// Новый сеанс после входа, первой регистрации или регистрации по приглашению.
+function startSession(req,res,user,data,password){const raw=crypto.randomBytes(32).toString('base64url'),now=new Date(),expires=new Date(now.getTime()+SESSION_MS);store.transaction(d=>{pruneSessions(d);const mine=d.sessions.filter(s=>s.userId===user.id);if(mine.length>=MAX_SESSIONS_PER_USER){const drop=new Set(mine.slice(0,mine.length-MAX_SESSIONS_PER_USER+1).map(s=>s.id));d.sessions=d.sessions.filter(s=>!drop.has(s.id))}const u=d.users.find(x=>x.id===user.id);if(u&&password!==undefined&&!Security.isHash(u.passwordHash)){u.passwordHash=Security.hashPassword(password);delete u.password}if(u)u.lastLoginAt=now.toISOString();d.sessions.push({id:'sess_'+crypto.randomUUID(),tokenHash:Security.tokenHash(raw),userId:user.id,createdAt:now.toISOString(),expiresAt:expires.toISOString(),ip:clientIp(req),agent:String(req.headers['user-agent']||'').slice(0,160)});return {changed:true}});Security.setSessionCookie(res,raw,{secure:secureRequest(req),maxAge:Math.floor(SESSION_MS/1000)});const fresh=store.read(),u=fresh.users.find(x=>x.id===user.id)||user;return json(res,200,{token:raw,user:{...Security.publicUser(u),perms:Access.perms(fresh,u)}})}
+// Запрос с этого же компьютера (не через прокси): только так можно создать первую учётную запись без ссылки из установщика.
+const isLoopback=req=>/^(127\.|::1$|::ffff:127\.)/.test(String(req.socket?.remoteAddress||''))&&!req.headers['x-forwarded-for']&&!req.headers['x-real-ip']&&!req.headers.forwarded;
+// Адрес CRM для ссылок-приглашений: как открыли (если не localhost), иначе адрес в офисной сети.
+function publicBase(req){const host=String(req.headers.host||'');const proto=secureRequest(req)?'https':'http';if(host&&!/^(localhost|127\.|\[::1\])/i.test(host))return {base:`${proto}://${host}`};const h=process.env.HOST||'127.0.0.1';if(['127.0.0.1','localhost','::1'].includes(h))return {base:'',networkOff:true};const ip=require('./lib/server-admin').lanIPs()[0];const port=server.address()?.port||Number(process.env.PORT||3030);return ip?{base:`http://${ip}:${port}`}:{base:'',networkOff:true}}
 
 async function documentsApi(req,res,url,user,body){
  const p=url.pathname;
@@ -118,18 +126,23 @@ async function api(req,res,url){
  if(avitoHook){if(req.method!=='POST')return json(res,405,{error:'Требуется POST'});return json(res,200,Avito.webhook(avitoHook[1],await readBody(req,64*1024)))}
  const webhook=url.pathname.match(/^\/api\/telephony\/webhooks\/([a-z][a-z0-9_-]{0,39})$/);
  if(webhook){telephony.authorize(req,webhook[1]);if(req.method!=='POST')return json(res,405,{error:'Требуется POST'});return json(res,200,telephony.ingest(webhook[1],await readBody(req)))}
- if(url.pathname==='/api/config'&&req.method==='GET')return json(res,200,{yandexMapsApiKey:process.env.YANDEX_MAPS_API_KEY||config.yandexMapsApiKey||'',version:VERSION,installer:process.env.PROMETEY_ADMIN_MUST_CHANGE==='1'});
+ if(url.pathname==='/api/config'&&req.method==='GET')return json(res,200,{yandexMapsApiKey:process.env.YANDEX_MAPS_API_KEY||config.yandexMapsApiKey||'',version:VERSION,installer:process.env.PROMETEY_ADMIN_MUST_CHANGE==='1',setup:Onboarding.setupNeeded(store.read())});
  const recordingRoute=url.pathname.match(/^\/api\/calls\/(clients|orders)\/([^/]+)\/([^/]+)\/recording$/);
- const needsBody=!recordingRoute&&['POST','PATCH','PUT'].includes(req.method);const bigBody=url.pathname==='/api/templates'||url.pathname.startsWith('/api/templates/')||url.pathname==='/api/files/logo';
- const body=needsBody?await readBody(req,bigBody?16*1024*1024:undefined):{};
+ const needsBody=!recordingRoute&&['POST','PATCH','PUT'].includes(req.method);const bigBody=url.pathname==='/api/feed/files'||url.pathname==='/api/templates'||url.pathname.startsWith('/api/templates/')||url.pathname==='/api/files/logo';
+ const body=needsBody?await readBody(req,url.pathname==='/api/feed/files'?28*1024*1024:bigBody?16*1024*1024:undefined):{};
  if(url.pathname==='/api/privacy/policy'&&req.method==='GET')return json(res,200,Privacy.publicPolicy());
  if(url.pathname==='/api/login'&&req.method==='POST'){
   if(typeof body.email!=='string'||typeof body.password!=='string'||body.email.length>320||body.password.length>Security.MAX_PASSWORD_LENGTH)return json(res,400,{error:'Укажите e-mail и пароль'});
   loginAllowed(req,body.email);const data=store.read();const user=data.users.find(u=>String(u.email||'').toLowerCase()===body.email.trim().toLowerCase());const stored=user&&(user.passwordHash||user.password);
   const valid=user&&!user.disabled&&stored?Security.verifyPassword(stored,body.password):Security.burnPasswordCheck(body.password);
   if(!valid){loginFailed(req,body.email);return json(res,401,{error:'Неверный логин или пароль'})}
-  loginSucceeded(req,body.email);const raw=crypto.randomBytes(32).toString('base64url'),now=new Date(),expires=new Date(now.getTime()+SESSION_MS);store.transaction(d=>{pruneSessions(d);const mine=d.sessions.filter(s=>s.userId===user.id);if(mine.length>=MAX_SESSIONS_PER_USER){const drop=new Set(mine.slice(0,mine.length-MAX_SESSIONS_PER_USER+1).map(s=>s.id));d.sessions=d.sessions.filter(s=>!drop.has(s.id))}const u=d.users.find(x=>x.id===user.id);if(u&&!Security.isHash(u.passwordHash)){u.passwordHash=Security.hashPassword(body.password);delete u.password}if(u)u.lastLoginAt=now.toISOString();d.sessions.push({id:'sess_'+crypto.randomUUID(),tokenHash:Security.tokenHash(raw),userId:user.id,createdAt:now.toISOString(),expiresAt:expires.toISOString(),ip:clientIp(req),agent:String(req.headers['user-agent']||'').slice(0,160)});return {changed:true}});Security.setSessionCookie(res,raw,{secure:secureRequest(req),maxAge:Math.floor(SESSION_MS/1000)});return json(res,200,{token:raw,user:{...Security.publicUser(user),perms:Access.perms(data,user)}})
+  loginSucceeded(req,body.email);return startSession(req,res,user,data,body.password)
  }
+ if(url.pathname==='/api/setup'&&req.method==='GET')return json(res,200,Onboarding.setupInfo(store.read()));
+ if(url.pathname==='/api/setup'&&req.method==='POST'){const owner=store.transaction(d=>({changed:true,body:Onboarding.setup(d,body,{local:isLoopback(req)})})).body;return startSession(req,res,owner,store.read())}
+ const invite=url.pathname.match(/^\/api\/invite\/([A-Za-z0-9_-]{16,64})$/);
+ if(invite&&req.method==='GET')return json(res,200,Onboarding.inviteInfo(store.read(),invite[1]));
+ if(invite&&req.method==='POST'){const nu=store.transaction(d=>({changed:true,body:Onboarding.accept(d,invite[1],body,{canAddUser:n=>License.canAddUser(n)})})).body;return startSession(req,res,nu,store.read())}
  if(url.pathname==='/api/session'&&req.method==='GET'){const data=store.read(),auth=currentSession(req,data);return json(res,200,{user:auth?Security.publicUser(auth.user):null})}
  const {raw,user}=authenticate(req);
  // Согласие с политикой обработки персональных данных — до любой работы в CRM.
@@ -144,8 +157,11 @@ async function api(req,res,url){
  if(url.pathname==='/api/license'&&req.method==='GET'){const c=License.current();return json(res,200,{enabled:c.enabled,status:c.status,statusText:c.statusText,readOnly:c.readOnly,banner:c.banner,message:c.message,until:c.until})}
  if(url.pathname==='/api/admin/license'||url.pathname==='/api/admin/license/check')return json(res,200,await License.admin(user,req.method,url,store.read()));
  if(url.pathname==='/api/admin/users'&&req.method==='POST'){const n=store.read().users.filter(u=>!u.disabled).length;if(!License.canAddUser(n))throw Object.assign(new Error(`По вашему тарифу доступно пользователей: ${License.current().maxUsers}. Отключите неактивного сотрудника или расширьте тариф.`),{status:402,code:'license_users_limit'})}
+ if(url.pathname==='/api/admin/invites'||url.pathname.startsWith('/api/admin/invites/')){const r=store.transaction(d=>({changed:req.method!=='GET',body:Onboarding.admin(d,user,req.method,url,body,publicBase(req))}));return json(res,req.method==='POST'?201:200,r.body)}
  if(url.pathname==='/api/admin/server'||url.pathname.startsWith('/api/admin/server/')){serverAdminApi||=require('./lib/server-admin').createServerAdmin({root:ROOT,dbFile:DB_FILE,port:()=>server.address()?.port||Number(process.env.PORT||3030)});return json(res,200,await serverAdminApi(user,req.method,url,body,store.read()))}
  if(url.pathname==='/api/admin'||url.pathname.startsWith('/api/admin/')||url.pathname.startsWith('/api/profile')){const r=store.transaction(d=>adminApi(d,user,req.method,url,body,{tokenHash:Security.tokenHash(raw)}));return json(res,r.status,r.body)}
+ const feedFile=url.pathname.match(/^\/api\/feed\/files\/(f_[0-9a-f-]{36})$/);
+ if(feedFile&&req.method==='GET'){const f=Feed.feedFile(store.read(),UPLOADS_DIR,feedFile[1]);if(!f)throw Object.assign(new Error('Файл не найден'),{status:404});const inline=f.inline&&url.searchParams.get('download')!=='1';return sendFile(res,f.file,inline?f.mime:'application/octet-stream',f.name,{inline,cache:'private, max-age=86400'})}
  if(url.pathname==='/api/feed'||url.pathname.startsWith('/api/feed/')){const r=store.transaction(d=>feedApi(d,user,req.method,url,body));return json(res,r.status,r.body)}
  if(url.pathname.startsWith('/api/accounting/'))return accountingApi(req,res,url,user,body,(status,b)=>json(res,status,b));
  if(recordingRoute)return await recordingHandler(req,res,recordingRoute,user);

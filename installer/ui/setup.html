@@ -45,7 +45,7 @@ label{display:block;font-weight:600;margin:14px 0 6px;color:#344054}
  <div class="card">
   <section id="s2">
    <h1 id="title">Устанавливаем ПРОМЕТЕЙ</h1>
-   <p class="lead">Ничего нажимать не нужно — это займёт около минуты.</p>
+   <p class="lead">Это займёт около минуты. Если Windows спросит разрешение — нажмите «Да»: так коллеги в офисе смогут открыть CRM.</p>
    <div class="bar"><div id="bar"></div></div>
    <div class="now" id="now">Подготовка…</div><div class="sub" id="sub"></div>
    <ul class="steps" id="steps"></ul>
@@ -53,18 +53,12 @@ label{display:block;font-weight:600;margin:14px 0 6px;color:#344054}
   <section id="s3" class="hidden">
    <div class="big-ok">✓</div>
    <h1 id="done-title">Готово!</h1>
-   <p class="lead" id="done-lead">CRM открывается в браузере. Ярлык «ПРОМЕТЕЙ CRM» — на рабочем столе.</p>
-   <div class="cred" id="cred">
-    <span>Адрес</span><b id="url"></b><button class="copy" data-copy="url">Копировать</button>
-    <span>Логин</span><b id="login"></b><button class="copy" data-copy="login">Копировать</button>
-    <span id="pass-l">Пароль</span><b id="pass"></b><button class="copy" id="pass-c" data-copy="pass">Копировать</button>
-   </div>
-   <div class="note" id="pass-note">Это временный пароль: при первом входе CRM попросит придумать свой. Запишите его, пока не вошли.</div>
-   <div class="small hidden" id="old-pass"></div>
+   <p class="lead" id="done-lead">Сейчас откроется CRM — создайте свою учётную запись. Коллег пригласите потом по ссылке.</p>
+   <div class="cred hidden" id="lan-box"><span>Для коллег</span><b id="lan"></b><button class="copy" data-copy="lan">Копировать</button></div>
    <div id="warns"></div>
    <button class="btn btn-primary" id="open">Открыть CRM</button>
-   <button class="btn btn-light" id="close">Закрыть окно</button>
-   <button class="link" id="reset">Забыли пароль руководителя? Выдать новый временный</button>
+   <button class="link hidden" id="reset">Забыли пароль руководителя? Задать новый</button>
+   <div class="error hidden" id="reset-err"></div>
   </section>
   <section id="s4" class="hidden">
    <h1>Не получилось установить</h1>
@@ -77,11 +71,9 @@ label{display:block;font-weight:600;margin:14px 0 6px;color:#344054}
 <script>
 const T='{{TOKEN}}';const $=id=>document.getElementById(id);
 const api=(p,b)=>fetch(p,{method:b?'POST':'GET',headers:{'X-Token':T,'content-type':'application/json'},body:b?JSON.stringify(b):undefined}).then(r=>r.json());
-let opened=false,url='';
+let url='';
 function show(id){for(const s of ['s2','s3','s4'])$(s).classList.toggle('hidden',s!==id)}
-function cred(login,pass){$('login').textContent=login||'';$('pass').textContent=pass||'';const has=!!pass;
- for(const id of ['pass','pass-l','pass-c','pass-note'])$(id).classList.toggle('hidden',!has);
- $('old-pass').textContent=has?'':'Пароль прежний — тот, которым вы входили. Если забыли, нажмите ссылку ниже.';$('old-pass').classList.toggle('hidden',has)}
+const go=u=>{location.href=u};
 async function start(){show('s2');await api('/api/install',{});poll()}
 async function poll(){let p;try{p=await api('/api/progress')}catch{return setTimeout(poll,1000)}
  const st=p.steps||[];const done=st.filter(s=>s.status==='ok'||s.status==='warn').length;$('bar').style.width=(st.length?Math.round(done*100/st.length):3)+'%';
@@ -89,14 +81,16 @@ async function poll(){let p;try{p=await api('/api/progress')}catch{return setTim
  $('steps').innerHTML='';for(const s of st){const li=document.createElement('li');li.className=s.status;li.textContent=s.name+(s.detail&&s.status!=='run'?' — '+s.detail:'');$('steps').append(li)}
  if(!p.done)return setTimeout(poll,600);
  if(p.error){$('err').textContent=p.error;show('s4');return}
- url=p.url;$('url').textContent=url;cred(p.login,p.password);
- if(p.updated){$('done-title').textContent='Обновлено!';$('done-lead').textContent='Все данные сохранены. CRM открывается в браузере.'}
+ url=p.url;
+ if(p.lan){$('lan').textContent=p.lan;$('lan-box').classList.remove('hidden')}
+ if(!p.setup){$('done-title').textContent=p.updated?'Обновлено!':'Готово!';$('done-lead').textContent=(p.updated?'Все данные сохранены. ':'')+'Сейчас откроется CRM. Ярлык «ПРОМЕТЕЙ CRM» — на рабочем столе.';$('reset').classList.remove('hidden')}
  $('warns').innerHTML='';for(const w of p.warnings||[]){const d=document.createElement('div');d.className='note';d.textContent=w;$('warns').append(d)}
- show('s3');if(!opened){opened=true;setTimeout(()=>api('/api/open',{URL:url}),1500)}}
+ show('s3');
+ // без предупреждений — сразу в CRM; с предупреждениями — даём их прочитать
+ if(!(p.warnings||[]).length)setTimeout(()=>go(url),p.setup?1500:2500)}
 document.addEventListener('click',e=>{const c=e.target.closest('[data-copy]');if(c){navigator.clipboard?.writeText($(c.dataset.copy).textContent);c.textContent='Скопировано'}});
-$('open').onclick=()=>api('/api/open',{URL:url});
-$('close').onclick=async()=>{await api('/api/quit',{}).catch(()=>{});document.body.innerHTML='<div class="wrap"><div class="card"><h1>Окно можно закрыть</h1><p class="lead">ПРОМЕТЕЙ работает и будет запускаться вместе с Windows. Открывайте его ярлыком на рабочем столе.</p></div></div>'};
-$('reset').onclick=async()=>{$('reset').disabled=true;const r=await api('/api/reset-password',{});$('reset').disabled=false;if(r.error){$("old-pass").textContent=r.error;$("old-pass").classList.remove("hidden");return}cred(r.login,r.password)};
+$('open').onclick=()=>go(url);
+$('reset').onclick=async()=>{$('reset').disabled=true;$('reset-err').classList.add('hidden');const r=await api('/api/reset-password',{}).catch(()=>({error:'нет ответа'}));$('reset').disabled=false;if(r.error){$('reset-err').textContent=r.error;$('reset-err').classList.remove('hidden');return}go(r.url)};
 $('retry').onclick=start;
 setInterval(()=>api('/api/ping').catch(()=>{}),20000);
 start();

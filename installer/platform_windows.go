@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"unicode/utf16"
@@ -27,7 +28,64 @@ var (
 	procKnownFolder   = shell32.NewProc("SHGetKnownFolderPath")
 	procMessageBox    = user32.NewProc("MessageBoxW")
 	procCoTaskMemFree = ole32.NewProc("CoTaskMemFree")
+	procShellExecEx   = shell32.NewProc("ShellExecuteExW")
+	kernel32          = syscall.NewLazyDLL("kernel32.dll")
+	procWaitObject    = kernel32.NewProc("WaitForSingleObject")
+	procExitCode      = kernel32.NewProc("GetExitCodeProcess")
 )
+
+type shellExecuteInfo struct {
+	cbSize       uint32
+	fMask        uint32
+	hwnd         uintptr
+	lpVerb       *uint16
+	lpFile       *uint16
+	lpParameters *uint16
+	lpDirectory  *uint16
+	nShow        int32
+	hInstApp     uintptr
+	lpIDList     uintptr
+	lpClass      *uint16
+	hkeyClass    uintptr
+	dwHotKey     uint32
+	hIcon        uintptr
+	hProcess     syscall.Handle
+}
+
+// runElevated запускает программу с правами администратора (Windows один раз спросит «Разрешить?») без окна и ждёт её.
+func runElevated(file, params string) error {
+	info := shellExecuteInfo{fMask: 0x40 | 0x100, lpVerb: u16("runas"), lpFile: u16(file), lpParameters: u16(params), nShow: 0}
+	info.cbSize = uint32(unsafe.Sizeof(info))
+	r, _, e := procShellExecEx.Call(uintptr(unsafe.Pointer(&info)))
+	if r == 0 {
+		if errno, ok := e.(syscall.Errno); ok && errno == 1223 {
+			return errors.New("в окне Windows нажали «Нет»")
+		}
+		return fmt.Errorf("не удалось запросить права администратора: %v", e)
+	}
+	if info.hProcess == 0 {
+		return nil
+	}
+	defer syscall.CloseHandle(info.hProcess)
+	procWaitObject.Call(uintptr(info.hProcess), 120000)
+	var code uint32
+	procExitCode.Call(uintptr(info.hProcess), uintptr(unsafe.Pointer(&code)))
+	if code != 0 {
+		return fmt.Errorf("netsh завершился с кодом %d", code)
+	}
+	return nil
+}
+
+// allowFirewall: правило брандмауэра для доступа из офисной сети (нужны права администратора — один вопрос Windows).
+func allowFirewall(L Layout, port int) error {
+	if _, err := run(sys32("netsh.exe"), "advfirewall", "firewall", "show", "rule", "name="+firewallRule, "verbose"); err == nil {
+		out, _ := run(sys32("netsh.exe"), "advfirewall", "firewall", "show", "rule", "name="+firewallRule, "verbose")
+		if strings.Contains(strings.ToLower(out), strings.ToLower(L.NodePath())) && strings.Contains(out, strconv.Itoa(port)) {
+			return nil // правило уже есть — второй раз не спрашиваем
+		}
+	}
+	return runElevated(sys32("cmd.exe"), "/c "+firewallCommands(L.NodePath(), port))
+}
 
 const createNoWindow = 0x08000000
 
