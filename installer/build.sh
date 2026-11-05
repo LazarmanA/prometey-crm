@@ -9,7 +9,7 @@ rm -f app.zip
 ( cd "$CRM" && zip -qr -X "$OLDPWD/app.zip" . \
    -x '.git/*' 'node_modules/*' 'tests/*' 'backups/*' 'storage/*.sqlite*' 'storage/documents/*' 'storage/recordings/*' \
       '*.log' 'recording.png' 'TEST_WINDOWS.bat' 'START_MAC.command' 'install-windows.ps1' 'УСТАНОВИТЬ_И_ЗАПУСТИТЬ.cmd' \
-      'RESET_DEMO_WINDOWS.bat' 'Dockerfile' 'docker-compose.yml' '.dockerignore' '.env' '.env.*' )
+      'RESET_DEMO_WINDOWS.bat' 'START_WINDOWS.bat' 'Dockerfile' 'docker-compose.yml' '.dockerignore' '.env' '.env.*' )
 echo "app.zip: $(du -h app.zip | cut -f1), версия $VERSION"
 mkdir -p dist
 # Node.js для Windows вшивается в установщик: NODE_EXE=путь/к/node.exe (официальная сборка, подпись OpenJS Foundation).

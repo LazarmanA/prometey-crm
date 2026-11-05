@@ -4,6 +4,7 @@ package main
 
 import (
 	"bytes"
+	_ "embed"
 	"errors"
 	"fmt"
 	"os"
@@ -11,8 +12,12 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"unicode/utf16"
 	"unsafe"
 )
+
+//go:embed prometey.ico
+var iconICO []byte
 
 var (
 	shell32           = syscall.NewLazyDLL("shell32.dll")
@@ -123,30 +128,81 @@ var (
 
 func quote(s string) string { return `"` + s + `"` }
 
+// Запуск CRM без чёрного окна: системный wscript.exe (у него нет консоли) выполняет scripts\windows-start.jscript,
+// а тот скрыто запускает сторожа на node.exe. Так и автозагрузка, и ярлык не показывают «командную строку».
+func startArgs(L Layout, open bool) string {
+	a := "//B //Nologo //E:JScript " + quote(filepath.Join(L.App, "scripts", "windows-start.jscript"))
+	if open {
+		a += " /open"
+	}
+	return a
+}
+
+func jsStr(s string) string { return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(s) + `"` }
+
+// makeShortcut создаёт ярлык .lnk через системный JScript (имена с кириллицей — поэтому файл в UTF-16).
+func makeShortcut(L Layout, lnk, icon string) error {
+	js := "var l=new ActiveXObject(\"WScript.Shell\").CreateShortcut(" + jsStr(lnk) + ");" +
+		"l.TargetPath=" + jsStr(sys32("wscript.exe")) + ";l.Arguments=" + jsStr(startArgs(L, true)) + ";" +
+		"l.WorkingDirectory=" + jsStr(L.App) + ";l.IconLocation=" + jsStr(icon+",0") + ";" +
+		"l.Description=" + jsStr("Открыть "+productName) + ";l.Save();"
+	u := utf16.Encode([]rune(js))
+	buf := make([]byte, 2, 2+2*len(u))
+	buf[0], buf[1] = 0xFF, 0xFE
+	for _, c := range u {
+		buf = append(buf, byte(c), byte(c>>8))
+	}
+	tmp := filepath.Join(L.Base, "make-shortcut.js")
+	if err := os.WriteFile(tmp, buf, 0o600); err != nil {
+		return err
+	}
+	defer os.Remove(tmp)
+	if _, err := run(sys32("cscript.exe"), "//B", "//Nologo", "//E:JScript", tmp); err != nil {
+		return err
+	}
+	if !fileExists(lnk) {
+		return errors.New("ярлык не создан")
+	}
+	return nil
+}
+
 // integrate: автозапуск при входе в Windows (раздел Run текущего пользователя), ярлык на рабочем столе и в «Пуске»,
 // пункт в «Параметры → Приложения». Всё в разделе пользователя — без прав администратора и без вопросов.
 func integrate(L Layout, port int) ([]string, error) {
 	var errs []string
-	runCmd := quote(L.NodePath()) + " " + quote(L.Launcher()) + " --detach"
-	if _, err := run(sys32("reg.exe"), "add", runKey, "/v", runValue, "/t", "REG_SZ", "/d", runCmd, "/f"); err != nil {
-		errs = append(errs, "автозапуск: "+err.Error())
+	icon := filepath.Join(L.Base, "prometey.ico")
+	if err := os.WriteFile(icon, iconICO, 0o644); err != nil {
+		icon = L.NodePath()
 	}
-	url := fmt.Sprintf("[InternetShortcut]\r\nURL=http://localhost:%d/\r\n", port)
+	url := fmt.Sprintf("[InternetShortcut]\r\nURL=http://localhost:%d/\r\nIconFile=%s\r\nIconIndex=0\r\n", port, icon)
 	home, _ := os.UserHomeDir()
 	desktop := knownFolder(folderDesktop, filepath.Join(home, "Desktop"))
-	menu := filepath.Join(knownFolder(folderPrograms, filepath.Join(os.Getenv("APPDATA"), `Microsoft\Windows\Start Menu\Programs`)), productName+".url")
+	menu := knownFolder(folderPrograms, filepath.Join(os.Getenv("APPDATA"), `Microsoft\Windows\Start Menu\Programs`))
 	var made []string
-	for _, f := range []string{filepath.Join(desktop, productName+".url"), menu} {
-		if err := os.WriteFile(f, []byte(url), 0o644); err != nil {
-			errs = append(errs, "ярлык: "+err.Error())
+	for _, dir := range []string{desktop, menu} {
+		lnk := filepath.Join(dir, productName+".lnk")
+		old := filepath.Join(dir, productName+".url") // ярлык прежних версий
+		if err := makeShortcut(L, lnk, icon); err == nil {
+			os.Remove(old)
+			made = append(made, lnk)
+		} else if err2 := os.WriteFile(old, []byte(url), 0o644); err2 == nil {
+			made = append(made, old)
 		} else {
-			made = append(made, f)
+			errs = append(errs, "ярлык: "+err.Error())
 		}
+	}
+	// Если сервер сценариев Windows (wscript) запрещён политикой — ярлык .lnk не создастся; тогда автозапуск напрямую через node.exe.
+	runCmd := quote(sys32("wscript.exe")) + " " + startArgs(L, false)
+	if wshOK := len(made) > 0 && strings.HasSuffix(made[0], ".lnk"); !wshOK {
+		runCmd = quote(L.NodePath()) + " " + quote(L.Launcher()) + " --detach"
+	}
+	if _, err := run(sys32("reg.exe"), "add", runKey, "/v", runValue, "/t", "REG_SZ", "/d", runCmd, "/f"); err != nil {
+		errs = append(errs, "автозапуск: "+err.Error())
 	}
 	uninstall := quote(L.NodePath()) + " " + quote(L.Uninstall())
 	for _, v := range [][3]string{
 		{"DisplayName", "REG_SZ", productName}, {"DisplayVersion", "REG_SZ", Version}, {"Publisher", "REG_SZ", "ПРОМЕТЕЙ"},
-		{"InstallLocation", "REG_SZ", L.Base}, {"DisplayIcon", "REG_SZ", L.NodePath()}, {"UninstallString", "REG_SZ", uninstall},
+		{"InstallLocation", "REG_SZ", L.Base}, {"DisplayIcon", "REG_SZ", icon}, {"UninstallString", "REG_SZ", uninstall},
 		{"NoModify", "REG_DWORD", "1"}, {"NoRepair", "REG_DWORD", "1"},
 	} {
 		if _, err := run(sys32("reg.exe"), "add", uninstKey, "/v", v[0], "/t", v[1], "/d", v[2], "/f"); err != nil {

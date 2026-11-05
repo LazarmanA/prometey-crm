@@ -1,0 +1,38 @@
+// ПРОМЕТЕЙ CRM — запуск без чёрного окна (Windows).
+// Запускается системной программой wscript.exe, у неё нет окна консоли:
+//   wscript.exe //B //Nologo //E:JScript windows-start.jscript         — автозагрузка: запустить CRM в фоне
+//   wscript.exe //B //Nologo //E:JScript windows-start.jscript /open   — ярлык: запустить, дождаться и открыть в браузере
+var fso = new ActiveXObject("Scripting.FileSystemObject");
+var sh = new ActiveXObject("WScript.Shell");
+var scripts = fso.GetParentFolderName(WScript.ScriptFullName);
+var app = fso.GetParentFolderName(scripts);
+var base = fso.GetParentFolderName(app);
+var node = fso.BuildPath(fso.BuildPath(base, "runtime"), "node.exe");
+var launcher = fso.BuildPath(scripts, "windows-launcher.js");
+var open = false;
+for (var i = 0; i < WScript.Arguments.length; i++) if (WScript.Arguments(i) == "/open") open = true;
+
+// 0 = окно скрыто; false = не ждать (сторож сам проверяет, не запущен ли он уже)
+sh.CurrentDirectory = app;
+sh.Run('"' + node + '" "' + launcher + '" --detach', 0, false);
+
+if (open) {
+  var port = 3030;
+  try {
+    var f = fso.OpenTextFile(fso.BuildPath(base, "install.json"), 1);
+    var m = /"port"\s*:\s*(\d+)/.exec(f.ReadAll()); f.Close();
+    if (m) port = parseInt(m[1], 10);
+  } catch (e) {}
+  var url = "http://localhost:" + port + "/";
+  // ждём до 40 секунд, пока CRM начнёт отвечать (после включения компьютера она стартует не сразу)
+  for (var t = 0; t < 40; t++) {
+    try {
+      var x = new ActiveXObject("MSXML2.ServerXMLHTTP.6.0");
+      x.setTimeouts(1000, 1000, 1000, 1000);
+      x.open("GET", url + "api/health", false); x.send();
+      if (x.status == 200) break;
+    } catch (e) {}
+    WScript.Sleep(1000);
+  }
+  sh.Run(url, 1, false);
+}
