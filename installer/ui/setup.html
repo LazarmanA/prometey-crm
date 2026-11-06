@@ -87,7 +87,7 @@ async function poll(){let p;try{p=await api('/api/progress')}catch{return setTim
  $('warns').innerHTML='';for(const w of p.warnings||[]){const d=document.createElement('div');d.className='note';d.textContent=w;$('warns').append(d)}
  show('s3');
  // без предупреждений — сразу в CRM; с предупреждениями — даём их прочитать
- if(!(p.warnings||[]).length)setTimeout(()=>go(url),p.setup?1500:2500)}
+ if(p.setup&&!(p.warnings||[]).length)setTimeout(()=>go(url),1500)}
 document.addEventListener('click',e=>{const c=e.target.closest('[data-copy]');if(c){navigator.clipboard?.writeText($(c.dataset.copy).textContent);c.textContent='Скопировано'}});
 $('open').onclick=()=>go(url);
 $('reset').onclick=async()=>{$('reset').disabled=true;$('reset-err').classList.add('hidden');const r=await api('/api/reset-password',{}).catch(()=>({error:'нет ответа'}));$('reset').disabled=false;if(r.error){$('reset-err').textContent=r.error;$('reset-err').classList.remove('hidden');return}go(r.url)};
