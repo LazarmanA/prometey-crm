@@ -6,6 +6,7 @@
 #  Обычно запускается сам из deploy.bat (Windows). Вручную:
 #     bash install-server.sh                      # спросит всё сам
 #     bash install-server.sh --domain crm.site.ru --email me@mail.ru
+#     bash install-server.sh --auto --data /root/prometey-data.tgz   # без вопросов (так запускает deploy.bat)
 #
 #  Что делает:
 #   1) обновляет систему, включает брандмауэр и защиту от подбора паролей
@@ -31,6 +32,8 @@ DOMAIN="${DOMAIN:-}"
 EMAIL="${EMAIL:-}"
 ARCHIVE="${ARCHIVE:-}"
 WITH_PDF="${WITH_PDF:-}"     # yes / no
+AUTO="${AUTO:-no}"           # yes — ни одного вопроса: вход в CRM — данные с компьютера или регистрация по ссылке
+DATA_ARCHIVE="${DATA_ARCHIVE:-}"  # данные CRM с компьютера (база + файлы) — только при первой установке
 
 c_ok()   { printf '\033[1;32m✔ %s\033[0m\n' "$*"; }
 c_info() { printf '\033[1;36m➜ %s\033[0m\n' "$*"; }
@@ -46,6 +49,8 @@ while [[ $# -gt 0 ]]; do
     --archive) ARCHIVE="$2"; shift 2 ;;
     --pdf)     WITH_PDF=yes; shift ;;
     --no-pdf)  WITH_PDF=no; shift ;;
+    --auto)    AUTO=yes; shift ;;
+    --data)    DATA_ARCHIVE="$2"; shift 2 ;;
     *) c_err "Неизвестный параметр: $1"; exit 1 ;;
   esac
 done
@@ -75,7 +80,8 @@ ask() { # ask "вопрос" "значение по умолчанию" -> REPLY
   REPLY="${REPLY:-$d}"
 }
 
-if [[ "$UPDATE" == "no" ]]; then
+[[ "$AUTO" == "yes" ]] && WITH_PDF="${WITH_PDF:-yes}"
+if [[ "$UPDATE" == "no" && "$AUTO" != "yes" ]]; then
   step "Пара вопросов"
   if [[ -z "$DOMAIN" ]]; then
     echo "Введите адрес сайта для CRM (например crm.mycompany.ru)."
@@ -93,6 +99,9 @@ fi
 DOMAIN="${DOMAIN,,}"; DOMAIN="${DOMAIN#http://}"; DOMAIN="${DOMAIN#https://}"; DOMAIN="${DOMAIN%%/*}"
 
 export DEBIAN_FRONTEND=noninteractive
+# Ubuntu 24.04: needrestart после обновления сам перезапускает службы, в том числе вход SSH — посреди установки.
+# Только список, без перезапусков.
+export NEEDRESTART_MODE=l NEEDRESTART_SUSPEND=1
 
 # =====================================================================
 step "1/7  Обновление системы и защита"
@@ -187,6 +196,25 @@ fi
 [[ -n "$ENTRY" && -f "$APP_DIR/$ENTRY" ]] || { c_err "Не нашёл файл запуска сервера (server.js)."; exit 1; }
 c_ok "Файл запуска: $ENTRY"
 
+# данные CRM с компьютера (из deploy.bat): только на новый сервер, рабочую базу сервера не трогаем никогда
+if [[ -n "$DATA_ARCHIVE" && -f "$DATA_ARCHIVE" ]]; then
+  if [[ "$UPDATE" == "no" && ! -f "$DATA_DIR/prometey.sqlite" ]]; then
+    DT=$(mktemp -d); tar -xzf "$DATA_ARCHIVE" -C "$DT"
+    if [[ -f "$DT/prometey.sqlite" ]] && head -c 15 "$DT/prometey.sqlite" | grep -q 'SQLite format'; then
+      install -m 600 "$DT/prometey.sqlite" "$DATA_DIR/prometey.sqlite"
+      for d in documents recordings uploads; do [[ -d "$DT/$d" ]] && { mkdir -p "$DATA_DIR/$d"; cp -a "$DT/$d/." "$DATA_DIR/$d/"; }; done
+      chown -R "$APP_USER:$APP_USER" "$DATA_DIR"
+      c_ok "Данные CRM с компьютера перенесены: сотрудники входят прежними логинами и паролями"
+    else
+      c_warn "Архив данных повреждён — CRM установлена с чистой базой"
+    fi
+    rm -rf "$DT"
+  else
+    c_info "На сервере уже есть данные — архив с компьютера не применяется (данные сервера сохранены)"
+  fi
+  rm -f "$DATA_ARCHIVE"
+fi
+
 # =====================================================================
 step "4/7  Служба (автозапуск)"
 if [[ ! -f "$ENV_FILE" ]]; then
@@ -217,7 +245,12 @@ fi
 chown root:"$APP_USER" "$ENV_FILE"; chmod 640 "$ENV_FILE"
 
 # рабочий режим не запустится с демо-паролями: логины и пароли задаются до первого старта
-if ! grep -q '^PROMETEY_ADMIN_PASSWORD=' "$ENV_FILE" || ! grep -q '^PROMETEY_MANAGER_PASSWORD=' "$ENV_FILE"; then
+# без вопросов: учётные записи берутся из перенесённой базы, а если её нет — руководитель регистрируется по одноразовой ссылке
+if [[ "$AUTO" == "yes" ]] && ! grep -q '^PROMETEY_ADMIN_PASSWORD=' "$ENV_FILE" && ! grep -q '^PROMETEY_SETUP=1' "$ENV_FILE"; then
+  printf 'PROMETEY_SETUP=1\nPROMETEY_SETUP_TOKEN=%s\n' "$(head -c 18 /dev/urandom | base64 | tr '+/' '-_' | tr -d '=\n')" >> "$ENV_FILE"
+  chown root:"$APP_USER" "$ENV_FILE"; chmod 640 "$ENV_FILE"
+fi
+if ! grep -q '^PROMETEY_SETUP=1' "$ENV_FILE" && { ! grep -q '^PROMETEY_ADMIN_PASSWORD=' "$ENV_FILE" || ! grep -q '^PROMETEY_MANAGER_PASSWORD=' "$ENV_FILE"; }; then
   step "Пароли руководителя и менеджера"
   echo "Придумайте НАДЁЖНЫЕ пароли (от 12 символов) и сразу запишите их."
   echo "При вводе пароля символы на экране не видны — это нормально."
@@ -466,9 +499,19 @@ if [[ "$HTTPS" == "yes" ]]; then URL="https://$DOMAIN"
 elif [[ -n "$DOMAIN" ]]; then URL="http://$DOMAIN  (HTTPS включите позже: prometey https)"
 else URL="http://$MY_IP"; fi
 
+# адрес для открытия: если CRM ждёт первую регистрацию — одноразовая ссылка с ключом
+BASE_URL_OPEN="http://$MY_IP"; [[ "$HTTPS" == "yes" ]] && BASE_URL_OPEN="https://$DOMAIN"; [[ "$HTTPS" != "yes" && -n "$DOMAIN" ]] && BASE_URL_OPEN="http://$DOMAIN"
+LINK="$BASE_URL_OPEN/"
+if curl -s --max-time 10 "http://127.0.0.1:$PORT/api/setup" | grep -q '"needed":true'; then
+  TOKEN=$(grep '^PROMETEY_SETUP_TOKEN=' "$ENV_FILE" | cut -d= -f2-)
+  [[ -n "$TOKEN" ]] && LINK="$BASE_URL_OPEN/#setup=$TOKEN"
+fi
+umask 077; echo "$LINK" > /root/prometey-link.txt
+
 printf '\n\033[1;32m══════════════════════════════════════════════════════\033[0m\n'
 if [[ "$UPDATE" == "yes" ]]; then echo "  ✅ Прометей ОБНОВЛЁН. Данные сохранены."
 else echo "  ✅ Прометей УСТАНОВЛЕН."; fi
 echo   "  Адрес CRM:  $URL"
+[[ "$LINK" == *"#setup="* ]] && echo "  Создать учётную запись руководителя: $LINK"
 echo   "  Управление: команда  prometey  (на сервере)"
 printf '\033[1;32m══════════════════════════════════════════════════════\033[0m\n'
