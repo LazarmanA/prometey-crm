@@ -17,6 +17,7 @@ const backend=[
  ['Авито → Лиды','tests/avito-test.js'],
  ['Согласие с политикой ПДн, список e-mail','tests/privacy-test.js'],
  ['Команда: регистрация, приглашения, файлы в ленте','tests/team-test.js'],
+ ['Перенос данных и архив ленты','tests/transfer-test.js'],
  ['Производительность API','tests/performance-test.js']
 ];
 const browser=[

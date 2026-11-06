@@ -13,14 +13,14 @@ function sheet(title,body,buttons=[],{wide=false}={}){
 }
 async function adminPage(p){
  const info=await api('/api/admin');
- const tabs=[...(info.canUsers?[['users','Сотрудники'],['departments','Отделы'],['roles','Роли и права'],['sessions','Сеансы']]:[]),...(info.canUsers||info.canSettings?[['emails','Почта и согласия']]:[]),...(info.canSettings?[['settings','Настройки CRM'],['server','Сервер'],['license','Подписка']]:[])];
+ const tabs=[...(info.canUsers?[['users','Сотрудники'],['departments','Отделы'],['roles','Роли и права'],['sessions','Сеансы']]:[]),...(info.canUsers||info.canSettings?[['emails','Почта и согласия']]:[]),...(info.canSettings?[['settings','Настройки CRM'],['server','Сервер'],['license','Подписка']]:[]),...(me?.perms?.admin?[['transfer','Перенос данных']]:[])];
  if(!tabs.some(t=>t[0]===adminTab))adminTab=tabs[0][0];
  p.innerHTML=`<div class="page-head"><div><h1>Администрирование</h1><p>Сотрудники ${info.active} из ${info.users} активны · отделов: ${info.departments} · ролей: ${info.roles} · открытых сеансов: ${info.sessions}</p></div><div class="actions">${info.canUsers?'<button class="btn btn-primary" id="adm-invite">Пригласить по ссылке</button><button class="btn btn-light" id="adm-new-user">Добавить вручную</button>':''}</div></div>
  <div class="tabs-row"><div class="segmented">${tabs.map(([v,t])=>`<button data-admin-tab="${v}" class="${adminTab===v?'active':''}">${t}</button>`).join('')}</div></div><div id="admin-body"><div class="muted">Загрузка…</div></div>`;
  p.querySelectorAll('[data-admin-tab]').forEach(b=>b.onclick=()=>{adminTab=b.dataset.adminTab;renderPage()});
  p.querySelector('#adm-new-user')?.addEventListener('click',()=>userForm());p.querySelector('#adm-invite')?.addEventListener('click',()=>inviteDialog().catch(err=>toast(err.message,true)));
  const body=p.querySelector('#admin-body');
- if(adminTab==='users')await adminUsers(body,info);else if(adminTab==='departments')await adminDepartments(body);else if(adminTab==='roles')await adminRoles(body,info);else if(adminTab==='sessions')await adminSessions(body);else if(adminTab==='server')await adminServer(body);else if(adminTab==='license')await adminLicense(body);else if(adminTab==='emails')await adminEmails(body);else await adminSettings(body);
+ if(adminTab==='users')await adminUsers(body,info);else if(adminTab==='departments')await adminDepartments(body);else if(adminTab==='roles')await adminRoles(body,info);else if(adminTab==='sessions')await adminSessions(body);else if(adminTab==='server')await adminServer(body);else if(adminTab==='transfer')await adminTransfer(body);else if(adminTab==='license')await adminLicense(body);else if(adminTab==='emails')await adminEmails(body);else await adminSettings(body);
 }
 async function adminRefs(){const [roles,deps]=await Promise.all([api('/api/admin/roles'),api('/api/admin/departments')]);return {roles:roles.roles,schema:roles.schema,deps}}
 async function adminUsers(box){
@@ -112,4 +112,33 @@ async function adminServer(box){
  ${s.log?`<div class="panel" style="margin-top:16px"><div class="panel-head"><h3>Журнал сервера</h3></div><pre style="margin:0;padding:14px;max-height:320px;overflow:auto;background:#0f1115;color:#d0d5dd;font:12px/1.45 Consolas,monospace;white-space:pre-wrap">${esc(s.log)}</pre></div>`:''}`;
  const act=(id,path,body,reload)=>box.querySelector(id)?.addEventListener('click',async e=>{e.target.disabled=true;try{const r=await api(path,{method:'POST',body:JSON.stringify(body||{})});toast(r.message);if(reload)setTimeout(()=>location.reload(),reload);else renderPage()}catch(x){toast(x.message,true);e.target.disabled=false}});
  act('#srv-backup','/api/admin/server/backup');act('#srv-fw','/api/admin/server/firewall');act('#srv-restart','/api/admin/server/restart',{},5000);act('#srv-net-on','/api/admin/server/network',{on:true},6000);act('#srv-net-off','/api/admin/server/network',{on:false},6000);
+}
+
+// Перенос данных: этот компьютер → сервер (или другой компьютер). Один архив со всем.
+async function adminTransfer(box){
+ box.innerHTML=`<div class="transfer-grid">
+ <div class="panel transfer-card"><div class="transfer-step">1</div><h3>Выгрузить данные отсюда</h3>
+  <p>Один архив со всем: компании, сделки, техника, документы, лента и переписка в сделках, сотрудники с их паролями, файлы и записи звонков.</p>
+  <a class="btn btn-primary" id="tr-export" href="/api/admin/transfer/export" download>Скачать архив переноса</a>
+  <p class="muted small">Сохраните файл, затем откройте CRM на сервере и загрузите его там (шаг 2). Архив содержит все данные компании — не пересылайте его посторонним.</p></div>
+ <div class="panel transfer-card"><div class="transfer-step">2</div><h3>Загрузить на новом месте</h3>
+  <p>На сервере или другом компьютере: выберите архив переноса. <b>Все данные этой CRM заменятся данными из архива.</b> Перед заменой делается резервная копия.</p>
+  <input type="file" id="tr-file" accept=".zip,application/zip" hidden><button class="btn btn-light" id="tr-pick">Выбрать архив…</button>
+  <div id="tr-check" class="transfer-check" hidden></div>
+  <p class="muted small">После загрузки все входят своими прежними e-mail и паролями.</p></div>
+ <div class="panel transfer-card"><div class="transfer-step">✉</div><h3>Архив ленты и сообщений</h3>
+  <p>Лента и переписка в сделках одной страницей — чтобы сохранить у себя или распечатать. Каждый сотрудник может скачать свой архив в «Ленте».</p>
+  <a class="btn btn-light" href="/api/archive/messages" download>Скачать мой архив (HTML)</a></div></div>`;
+ const pick=box.querySelector('#tr-file'),check=box.querySelector('#tr-check');
+ box.querySelector('#tr-export').addEventListener('click',()=>toast('Готовим архив — загрузка начнётся через несколько секунд'));
+ box.querySelector('#tr-pick').onclick=()=>pick.click();
+ pick.onchange=()=>{const f=pick.files[0];if(!f)return;check.hidden=false;
+  check.innerHTML=`<p>Файл: <b>${esc(f.name)}</b>, ${(f.size/1048576).toFixed(1).replace('.',',')} МБ</p><label for="tr-confirm">Чтобы заменить данные, напишите слово <b>ЗАМЕНИТЬ</b></label><input class="field" id="tr-confirm" autocomplete="off"><button class="btn btn-danger" id="tr-go" disabled>Загрузить и заменить данные</button><div class="muted small" id="tr-status"></div>`;
+  const go=check.querySelector('#tr-go'),conf=check.querySelector('#tr-confirm'),status=check.querySelector('#tr-status');
+  conf.oninput=()=>{go.disabled=conf.value.trim().toUpperCase()!=='ЗАМЕНИТЬ'};
+  go.onclick=async()=>{go.disabled=true;conf.disabled=true;status.textContent='Загружаем архив…';
+   try{const r=await fetch('/api/admin/transfer/import',{method:'POST',headers:{'content-type':'application/zip',...(token?{authorization:'Bearer '+token}:{})},body:f,credentials:'same-origin'});const j=await r.json().catch(()=>({error:'Нет ответа от CRM'}));if(!r.ok)throw new Error(j.error||'Ошибка загрузки');
+    sheet('Данные перенесены',`<p>Загружено: ${j.counts.clients} компаний, ${j.counts.orders} сделок, ${j.counts.feed} сообщений ленты, ${j.counts.messages} сообщений в сделках, ${j.counts.users} сотрудников, ${j.files} файлов.</p><p>Теперь войдите своим e-mail и паролем из прежней CRM. Копия прежней базы сохранена: ${esc(j.backup)}.</p>`,[{text:'Перейти ко входу',cls:'btn-primary',onClick:()=>{token='';me=null;renderLogin()}}]);
+   }catch(e){status.textContent=e.message;toast(e.message,true);go.disabled=false;conf.disabled=false}};
+ };
 }

@@ -68,6 +68,17 @@ const PNG=Buffer.from('89504e470d0a1a0a0000000d494844520000004000000030080200000
  if(SHOTS)await page.screenshot({path:path.join(SHOTS,'7-feed.png'),fullPage:true});
  await p2.reload();await p2.locator('.nav').waitFor();await p2.locator('.nav').getByRole('button',{name:/Лента/}).click();await p2.locator('.post-images img').first().waitFor();ok(true,'employee sees the photo on the phone');
  ok(await p2.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'feed with files fits a phone screen');
+ // архив ленты и перенос данных
+ await page.locator('.nav').getByRole('button',{name:/Лента$/}).click();await page.locator('#feed-form').waitFor();
+ let dl=page.waitForEvent('download');await page.getByRole('link',{name:'Скачать архив'}).click();const arch=await dl;ok(/arhiv-lenty/.test(arch.suggestedFilename()),'feed: «Скачать архив» downloads the archive');
+ await page.locator('.nav').getByRole('button',{name:/Администрирование$/}).click();await page.locator('[data-admin-tab="transfer"]').click();await page.locator('#tr-export').waitFor();
+ if(SHOTS)await page.screenshot({path:path.join(SHOTS,'8-transfer.png')});
+ dl=page.waitForEvent('download');await page.locator('#tr-export').click();const z=await dl;ok(/prometey-perenos-.*\.zip$/.test(z.suggestedFilename()),'transfer archive downloads from Администрирование → Перенос данных');
+ const zf=path.join(temp,'perenos.zip');await z.saveAs(zf);
+ const ch=page.waitForEvent('filechooser');await page.locator('#tr-pick').click();await (await ch).setFiles({name:'perenos.zip',mimeType:'application/zip',buffer:fs.readFileSync(zf)});
+ ok(await page.locator('#tr-go').isDisabled(),'replace button locked until ЗАМЕНИТЬ is typed');
+ await page.locator('#tr-confirm').fill('заменить');await page.locator('#tr-go').click();await page.getByText('Данные перенесены').waitFor({timeout:30000});ok(true,'archive loaded back from the browser');
+ await page.locator('.modal-foot').getByRole('button',{name:'Перейти ко входу'}).click();await page.locator('#login-email').fill('boss@kran.ru');await page.locator('#login-pass').fill('Kran-Boss-2026!');await page.locator('#login-pass').press('Enter');await page.locator('.nav').waitFor();ok(true,'owner signs in again after the transfer');
  assert.deepEqual(errors,[]);ok(true,'no browser errors');
  console.log(`OK team UI: ${checks} checks`);
 }catch(e){console.error(e);process.exitCode=1}finally{try{await browser?.close()}catch{};try{srv?.kill()}catch{};fs.rmSync(temp,{recursive:true,force:true})}})();

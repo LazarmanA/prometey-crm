@@ -18,6 +18,7 @@ const store=new (require('./lib/database').Store)(DB_FILE,DATA_FILE);
 const UPLOADS_DIR=process.env.UPLOADS_DIR||path.join(path.dirname(DB_FILE),'uploads');
 const Files=require('./lib/files').createFiles({dir:UPLOADS_DIR});
 const Feed=require('./lib/feed'),feedApi=Feed.createFeed({settings:require('./lib/admin').settings,dir:UPLOADS_DIR});Documents.configure({files:Files});
+const Transfer=require('./lib/transfer').createTransfer({store,version:require('./package.json').version,dirs:{uploads:UPLOADS_DIR,documents:DOCUMENTS_DIR,recordings:process.env.RECORDINGS_DIR||path.join(path.dirname(DB_FILE),'recordings')},backupDir:process.env.BACKUP_DIR||path.join(path.dirname(DB_FILE),'backups')});
 const Onboarding=require('./lib/onboarding').createOnboarding();store.transaction(d=>({changed:Onboarding.prepare(d)}));
 Security.bootstrapPasswords(store,process.env);
 const recordingHandler=require('./lib/recordings').createRecordings(store,CRM,process.env.RECORDINGS_DIR||path.join(path.dirname(DB_FILE),'recordings'));
@@ -93,6 +94,9 @@ async function documentsApi(req,res,url,user,body){
  throw Object.assign(new Error('Операция документов не найдена'),{status:404});
 }
 
+function sendBuffer(res,buf,mime,name){res.statusCode=200;res.setHeader('Content-Type',mime);res.setHeader('Content-Length',buf.length);res.setHeader('Cache-Control','private, no-store');res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Content-Disposition',`attachment; filename*=UTF-8''${encodeURIComponent(name)}`);res.end(buf)}
+// Тело запроса как есть (архив переноса) — во временный файл, с ограничением размера.
+function readRaw(req,limit){return new Promise((resolve,reject)=>{const chunks=[];let size=0,failed=false;req.on('data',c=>{if(failed)return;size+=c.length;if(size>limit){failed=true;reject(Object.assign(new Error('Архив больше 900 МБ'),{status:413}));req.resume();return}chunks.push(c)});req.on('end',()=>{if(!failed)resolve(Buffer.concat(chunks))});req.on('error',reject)})}
 function sendFile(res,file,mime,name,{inline=false,cache='private, no-store'}={}){res.statusCode=200;res.setHeader('Content-Type',mime);res.setHeader('Content-Length',fs.statSync(file).size);res.setHeader('Cache-Control',cache);res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Content-Disposition',`${inline?'inline':'attachment'}; filename*=UTF-8''${encodeURIComponent(name)}`);return fs.createReadStream(file).pipe(res)}
 async function filesApi(req,res,url,user,body){
  const p=url.pathname,m=req.method;
@@ -128,7 +132,8 @@ async function api(req,res,url){
  if(webhook){telephony.authorize(req,webhook[1]);if(req.method!=='POST')return json(res,405,{error:'Требуется POST'});return json(res,200,telephony.ingest(webhook[1],await readBody(req)))}
  if(url.pathname==='/api/config'&&req.method==='GET')return json(res,200,{yandexMapsApiKey:process.env.YANDEX_MAPS_API_KEY||config.yandexMapsApiKey||'',version:VERSION,installer:process.env.PROMETEY_ADMIN_MUST_CHANGE==='1',setup:Onboarding.setupNeeded(store.read())});
  const recordingRoute=url.pathname.match(/^\/api\/calls\/(clients|orders)\/([^/]+)\/([^/]+)\/recording$/);
- const needsBody=!recordingRoute&&['POST','PATCH','PUT'].includes(req.method);const bigBody=url.pathname==='/api/feed/files'||url.pathname==='/api/templates'||url.pathname.startsWith('/api/templates/')||url.pathname==='/api/files/logo';
+ const transferImport=url.pathname==='/api/admin/transfer/import';
+ const needsBody=!recordingRoute&&!transferImport&&['POST','PATCH','PUT'].includes(req.method);const bigBody=url.pathname==='/api/feed/files'||url.pathname==='/api/templates'||url.pathname.startsWith('/api/templates/')||url.pathname==='/api/files/logo';
  const body=needsBody?await readBody(req,url.pathname==='/api/feed/files'?28*1024*1024:bigBody?16*1024*1024:undefined):{};
  if(url.pathname==='/api/privacy/policy'&&req.method==='GET')return json(res,200,Privacy.publicPolicy());
  if(url.pathname==='/api/login'&&req.method==='POST'){
@@ -157,6 +162,9 @@ async function api(req,res,url){
  if(url.pathname==='/api/license'&&req.method==='GET'){const c=License.current();return json(res,200,{enabled:c.enabled,status:c.status,statusText:c.statusText,readOnly:c.readOnly,banner:c.banner,message:c.message,until:c.until})}
  if(url.pathname==='/api/admin/license'||url.pathname==='/api/admin/license/check')return json(res,200,await License.admin(user,req.method,url,store.read()));
  if(url.pathname==='/api/admin/users'&&req.method==='POST'){const n=store.read().users.filter(u=>!u.disabled).length;if(!License.canAddUser(n))throw Object.assign(new Error(`По вашему тарифу доступно пользователей: ${License.current().maxUsers}. Отключите неактивного сотрудника или расширьте тариф.`),{status:402,code:'license_users_limit'})}
+ if(url.pathname==='/api/admin/transfer/export'&&req.method==='GET'){const r=Transfer.exportArchive(user);return sendBuffer(res,r.zip,'application/zip',r.name)}
+ if(transferImport&&req.method==='POST'){if(!Access.perms(store.read(),user).admin)throw Object.assign(new Error('Загружать данные может администратор'),{status:403});return json(res,200,await Transfer.importArchive(user,await readRaw(req,Transfer.MAX_ARCHIVE)))}
+ if(url.pathname==='/api/archive/messages'&&req.method==='GET'){const d=store.read();const r=Transfer.personalArchive(user,{orders:CRM.scopes?CRM.scopes.sharedOrderScope(d,user):[]});return sendBuffer(res,Buffer.from(r.html),'text/html; charset=utf-8',r.name)}
  if(url.pathname==='/api/admin/invites'||url.pathname.startsWith('/api/admin/invites/')){const r=store.transaction(d=>({changed:req.method!=='GET',body:Onboarding.admin(d,user,req.method,url,body,publicBase(req))}));return json(res,req.method==='POST'?201:200,r.body)}
  if(url.pathname==='/api/admin/server'||url.pathname.startsWith('/api/admin/server/')){serverAdminApi||=require('./lib/server-admin').createServerAdmin({root:ROOT,dbFile:DB_FILE,port:()=>server.address()?.port||Number(process.env.PORT||3030)});return json(res,200,await serverAdminApi(user,req.method,url,body,store.read()))}
  if(url.pathname==='/api/admin'||url.pathname.startsWith('/api/admin/')||url.pathname.startsWith('/api/profile')){const r=store.transaction(d=>adminApi(d,user,req.method,url,body,{tokenHash:Security.tokenHash(raw)}));return json(res,r.status,r.body)}

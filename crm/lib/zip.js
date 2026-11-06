@@ -12,12 +12,12 @@ function crc32(buf){
 }
 
 // → Map(name → Buffer), порядок сохраняется
-function readZip(buf){
+function readZip(buf,{maxTotal=MAX_TOTAL,maxEntries=MAX_ENTRIES}={}){
  if(!Buffer.isBuffer(buf)||buf.length<22)fail('Файл повреждён или это не документ Word (.docx)');
  let eocd=-1;for(let i=buf.length-22;i>=Math.max(0,buf.length-22-65535);i--)if(buf.readUInt32LE(i)===0x06054b50){eocd=i;break}
  if(eocd<0)fail('Файл повреждён или это не документ Word (.docx)');
  const count=buf.readUInt16LE(eocd+10),cdOffset=buf.readUInt32LE(eocd+16);
- if(count>MAX_ENTRIES)fail('Слишком много частей в файле');
+ if(count>maxEntries)fail('Слишком много частей в файле');
  const out=new Map();let p=cdOffset,total=0;
  for(let i=0;i<count;i++){
   if(p+46>buf.length||buf.readUInt32LE(p)!==0x02014b50)fail('Файл повреждён (оглавление архива)');
@@ -27,7 +27,7 @@ function readZip(buf){
   if(name.includes('..')||name.startsWith('/')||name.includes('\\'))fail('Недопустимое имя внутри файла');
   if(local+30>buf.length||buf.readUInt32LE(local)!==0x04034b50)fail('Файл повреждён (заголовок части)');
   const start=local+30+buf.readUInt16LE(local+26)+buf.readUInt16LE(local+28),raw=buf.subarray(start,start+csize);
-  total+=usize;if(total>MAX_TOTAL)fail('Файл слишком большой после распаковки');
+  total+=usize;if(total>maxTotal)fail('Файл слишком большой после распаковки');
   let data;if(method===0)data=Buffer.from(raw);else if(method===8)data=zlib.inflateRawSync(raw,{maxOutputLength:Math.max(usize,1)+1024});else fail('Неподдерживаемое сжатие в файле');
   if(name.endsWith('/'))continue;out.set(name,data);
  }

@@ -316,7 +316,7 @@ server {
     listen [::]:80;
     server_name $SERVER_NAME;
 
-    client_max_body_size 25m;     # записи звонков до 20 МБ
+    client_max_body_size 900m;    # архив переноса данных; лимиты отдельных загрузок проверяет сама CRM
     server_tokens off;
     client_body_timeout 30s;
     client_header_timeout 15s;
