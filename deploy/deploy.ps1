@@ -7,7 +7,11 @@ try { [Console]::OutputEncoding = [Text.Encoding]::UTF8 } catch {}
 
 function Ok($t)   { Write-Host "OK  $t" -ForegroundColor Green }
 function Info($t) { Write-Host ">>  $t" -ForegroundColor Cyan }
-function Fail($t) { Write-Host "ОШИБКА: $t" -ForegroundColor Red; Read-Host "Нажмите Enter, чтобы закрыть"; exit 1 }
+function Fail($t) { Write-Host "ОШИБКА: $t" -ForegroundColor Red; try { Stop-Transcript | Out-Null } catch {}; Read-Host "Нажмите Enter, чтобы закрыть"; exit 1 }
+# журнал всего, что видно в окне: deploy\deploy-log.txt (пришлите его, если что-то пошло не так)
+try { Start-Transcript -Path (Join-Path $PSScriptRoot 'deploy-log.txt') -Append | Out-Null } catch {}
+# любая непредвиденная ошибка — показать и не закрывать окно
+trap { Write-Host ""; Write-Host "ОШИБКА: $($_.Exception.Message)" -ForegroundColor Red; Write-Host "(строка $($_.InvocationInfo.ScriptLineNumber))"; try { Stop-Transcript | Out-Null } catch {}; Read-Host "Сделайте снимок экрана и нажмите Enter, чтобы закрыть"; exit 1 }
 
 Write-Host ""
 Write-Host "=== ПРОМЕТЕЙ CRM: размещение на сервере ===" -ForegroundColor Magenta
@@ -153,11 +157,13 @@ else {
 
 # --- новый сервер или обновление? ---
 $oldEA = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-$installed = ((& ssh @sshOpts $target 'test -f /opt/prometey/package.json && echo YES || echo NO' 2>$null | Out-String).Trim() -eq 'YES')
+$state = (& ssh @sshOpts $target 'if pgrep -f ''install-serve[r].sh'' >/dev/null; then echo RUNNING; elif test -f /var/lib/prometey/prometey.sqlite; then echo YES; else echo NO; fi' 2>$null | Out-String).Trim()
+$installed = ($state -eq 'YES'); $running = ($state -eq 'RUNNING')
 $ErrorActionPreference = $oldEA
 $files = @($arch, $installer)
 $dataArg = ''
-if ($installed) { Ok "На сервере уже есть ПРОМЕТЕЙ — обновляю программу, данные сервера сохраняются" }
+if ($running) { Ok "На сервере уже идёт установка — подключаюсь и показываю, как она продвигается" }
+elseif ($installed) { Ok "На сервере уже есть ПРОМЕТЕЙ — обновляю программу, данные сервера сохраняются" }
 else {
   # --- данные CRM с этого компьютера: на новый сервер переезжают сами ---
   $pc = Join-Path $env:LOCALAPPDATA 'Prometey'
@@ -182,6 +188,7 @@ else {
   } else { Info "CRM на этом компьютере не найдена — на сервере будет чистая база, руководитель зарегистрируется по ссылке" }
 }
 
+if (-not $running) {
 Info "Отправляю файлы на сервер (1/2)…"
 $sent = $false
 for ($try = 1; $try -le 5 -and -not $sent; $try++) {
@@ -203,6 +210,7 @@ for ($try = 1; $try -le 5 -and -not $started; $try++) {
   if ($r -match 'started') { $started = $true } elseif ($try -lt 5) { Start-Sleep -Seconds 10 }
 }
 if (-not $started) { Fail "Не удалось запустить установку: сервер не отвечает. Подождите 5 минут и запустите снова." }
+}
 
 # следим за ходом установки
 $shown = 0; $exit = ''; $misses = 0
@@ -233,4 +241,5 @@ if ($link -match '#setup=') { Write-Host "  Сейчас откроется ст
 elseif ($dataArg) { Write-Host "  Входите прежним логином и паролем — все данные перенесены." -ForegroundColor Green }
 Write-Host "==================================================================" -ForegroundColor Green
 try { Start-Process $link } catch {}
+try { Stop-Transcript | Out-Null } catch {}
 Read-Host "Нажмите Enter, чтобы закрыть"
