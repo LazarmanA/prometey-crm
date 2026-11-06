@@ -94,23 +94,60 @@ $sshOpts = $base + @('-i',$key,'-o','IdentitiesOnly=yes')
 
 function Test-Key { $old = $ErrorActionPreference; $ErrorActionPreference = 'Continue'; try { & ssh @sshOpts -o BatchMode=yes $target 'true' 2>$null | Out-Null; return ($LASTEXITCODE -eq 0) } catch { return $false } finally { $ErrorActionPreference = $old } }
 
+# Окно Windows для пароля: Ctrl+V работает всегда, можно включить «Показать пароль» и проверить глазами.
+function Ask-Password([string]$note) {
+  try {
+    Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+    $f = New-Object Windows.Forms.Form
+    $f.Text = 'ПРОМЕТЕЙ — пароль сервера'; $f.Width = 520; $f.Height = 290; $f.StartPosition = 'CenterScreen'; $f.TopMost = $true
+    $f.FormBorderStyle = 'FixedDialog'; $f.MaximizeBox = $false; $f.MinimizeBox = $false; $f.Font = New-Object Drawing.Font('Segoe UI', 10)
+    $l = New-Object Windows.Forms.Label; $l.Left = 16; $l.Top = 14; $l.Width = 470; $l.Height = 70
+    $l.Text = "Вставьте пароль root от сервера $ip из письма Рег.облака:`nщёлкните в поле ниже и нажмите Ctrl+V. Затем «Продолжить»."
+    $e = New-Object Windows.Forms.Label; $e.Left = 16; $e.Top = 84; $e.Width = 470; $e.Height = 22; $e.ForeColor = 'Firebrick'; $e.Text = $note
+    $t = New-Object Windows.Forms.TextBox; $t.Left = 16; $t.Top = 110; $t.Width = 470; $t.UseSystemPasswordChar = $true
+    $c = New-Object Windows.Forms.CheckBox; $c.Left = 16; $c.Top = 145; $c.Width = 300; $c.Text = 'Показать пароль'
+    $c.Add_CheckedChanged({ $t.UseSystemPasswordChar = -not $c.Checked })
+    $ok = New-Object Windows.Forms.Button; $ok.Left = 300; $ok.Top = 190; $ok.Width = 186; $ok.Height = 36; $ok.Text = 'Продолжить'; $ok.DialogResult = 'OK'
+    $no = New-Object Windows.Forms.Button; $no.Left = 186; $no.Top = 190; $no.Width = 100; $no.Height = 36; $no.Text = 'Отмена'; $no.DialogResult = 'Cancel'
+    $f.Controls.AddRange(@($l, $e, $t, $c, $ok, $no)); $f.AcceptButton = $ok; $f.CancelButton = $no
+    $f.Add_Shown({ $f.Activate(); $t.Focus() })
+    if ($f.ShowDialog() -ne 'OK') { return $null }
+    return ($t.Text -replace '[\r\n]', '').Trim()   # без пробелов и переносов, которые попадают при копировании из письма
+  } catch { return '' }
+}
+
 if (Test-Key) { Ok "Вход на сервер по ключу — пароль не нужен" }
 else {
-  Write-Host ""
-  Write-Host "Сейчас появится строка  root@$ip's password:" -ForegroundColor Yellow
-  Write-Host "Скопируйте пароль root (Ctrl+C), щёлкните ПРАВОЙ кнопкой мыши в этом окне и нажмите Enter." -ForegroundColor Yellow
-  Write-Host "Символы пароля НЕ видны — это нормально. Пароль нужен только один раз." -ForegroundColor Yellow
-  Write-Host ""
   $pub = (Get-Content "$key.pub" -Raw).Trim()
   $addKey = "umask 077; mkdir -p ~/.ssh; touch ~/.ssh/authorized_keys; grep -qxF '$pub' ~/.ssh/authorized_keys || echo '$pub' >> ~/.ssh/authorized_keys"
-  $ok = $false
+  # пароль передаётся ssh через временный помощник (SSH_ASKPASS) — вводить его в чёрное окно не нужно
+  $askpass = Join-Path $env:TEMP 'prometey-askpass.cmd'
+  Set-Content -Path $askpass -Encoding ASCII -Value "@echo off`r`npowershell -NoProfile -NonInteractive -Command `"[Console]::Out.WriteLine(`$env:PROMETEY_PW)`""
+  $ok = $false; $note = ''; $console = $false
   for ($try = 1; $try -le 5 -and -not $ok; $try++) {
-    & ssh @base -o PreferredAuthentications=password -o PubkeyAuthentication=no -o NumberOfPasswordPrompts=1 $target $addKey
-    $code = $LASTEXITCODE
-    if ($code -eq 0 -and (Test-Key)) { $ok = $true; break }
-    if ($try -lt 5) { Write-Host ""; Info "Не получилось (неверный пароль или сервер не ответил). Ещё раз ($($try+1)/5) — снова вставьте пароль root."; Start-Sleep -Seconds 5 }
+    $pw = if ($console) { '' } else { Ask-Password $note }
+    if ($null -eq $pw) { Fail "Установка отменена." }
+    if ($pw) {
+      Info "Проверяю пароль…"
+      $env:PROMETEY_PW = $pw; $env:SSH_ASKPASS = $askpass; $env:SSH_ASKPASS_REQUIRE = 'force'; if (-not $env:DISPLAY) { $env:DISPLAY = 'localhost:0' }
+      $oldEA = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+      $out = (& ssh @base -o PreferredAuthentications=password,keyboard-interactive -o PubkeyAuthentication=no -o NumberOfPasswordPrompts=1 $target $addKey 2>&1 | Out-String)
+      $ErrorActionPreference = $oldEA
+      Remove-Item Env:PROMETEY_PW, Env:SSH_ASKPASS, Env:SSH_ASKPASS_REQUIRE -ErrorAction SilentlyContinue
+      if (Test-Key) { $ok = $true; break }
+      if ($out -match 'askpass|ssh_askpass') { $console = $true; Info "Окно для пароля не сработало — введите пароль здесь, как раньше." }
+      elseif ($out -match 'Permission denied') { $note = "Пароль не подошёл ($try из 5). Проверьте: это пароль из ПОСЛЕДНЕГО письма?" }
+      else { $note = "Сервер не ответил ($try из 5) — попробуйте ещё раз через минуту."; Start-Sleep -Seconds 20 }
+    }
+    if ($console) {
+      Write-Host ""
+      Write-Host "Вставьте пароль root: Ctrl+V (или Ctrl+Shift+V) и Enter. Символы не видны — это нормально." -ForegroundColor Yellow
+      & ssh @base -o PreferredAuthentications=password,keyboard-interactive -o PubkeyAuthentication=no -o NumberOfPasswordPrompts=1 $target $addKey
+      if (Test-Key) { $ok = $true; break }
+    }
   }
-  if (-not $ok) { Fail "Не удалось войти на сервер. 'Permission denied' — пароль root неверный: скопируйте его заново из письма или сбросьте в панели Рег.облака. 'timed out' — сервер перегружен: подождите 5 минут и запустите снова." }
+  Remove-Item $askpass -ErrorAction SilentlyContinue
+  if (-not $ok) { Fail "Не удалось войти на сервер: пароль не подошёл. Задайте новый пароль root в панели Рег.облака (меню сервера → сменить пароль) и запустите снова." }
   Ok "Доступ по ключу настроен — больше пароль не понадобится"
 }
 
