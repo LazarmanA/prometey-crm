@@ -2,6 +2,7 @@
 #  ПРОМЕТЕЙ CRM — отправка программы на сервер (запускается из deploy.bat)
 #  Первый раз — устанавливает, следующие разы — обновляет (данные сохраняются).
 # =====================================================================
+param([switch]$NewOwner)   # -NewOwner: после установки — заново задать e-mail и пароль владельца (данные сохраняются)
 $ErrorActionPreference = 'Stop'
 try { [Console]::OutputEncoding = [Text.Encoding]::UTF8 } catch {}
 
@@ -236,6 +237,25 @@ for ($i = 0; $i -lt 240 -and $exit -eq ''; $i++) {
 if ($exit -eq '') { Fail "Установка идёт дольше 40 минут. Подождите ещё и запустите РАЗМЕСТИТЬ НА СЕРВЕРЕ снова — повторный запуск безопасен." }
 if ($exit -ne '0') { Fail "Установка на сервере завершилась с ошибкой (код $exit). Сделайте снимок экрана с текстом выше и пришлите его." }
 
+# владелец заново: CRM переходит в «восстановление доступа» с одноразовым ключом (данные не меняются)
+if ($NewOwner) {
+  Info "Готовлю регистрацию владельца заново…"
+  $reset = @'
+F=/etc/prometey.env
+T=$(head -c 18 /dev/urandom | base64 | tr '+/' '-_' | tr -d '=\n')
+sed -i '/^PROMETEY_SETUP=/d;/^PROMETEY_SETUP_TOKEN=/d;/^PROMETEY_RESET_OWNER=/d;/^PROMETEY_ADMIN_EMAIL=/d;/^PROMETEY_ADMIN_PASSWORD=/d;/^PROMETEY_ADMIN_MUST_CHANGE=/d' "$F"
+printf 'PROMETEY_SETUP=1\nPROMETEY_SETUP_TOKEN=%s\nPROMETEY_RESET_OWNER=%s\n' "$T" "$T" >> "$F"
+systemctl restart prometey
+for i in $(seq 1 30); do R=$(curl -s --max-time 3 http://127.0.0.1/api/setup || true); case "$R" in *needed*) break;; esac; sleep 1; done
+IP=$(sed -n 's#^\(https\?://[^/]*\).*#\1#p' /root/prometey-link.txt 2>/dev/null); IP=${IP:-http://$(hostname -I | awk '{print $1}')}
+echo "$IP/#setup=$T" > /root/prometey-link.txt
+'@
+  $b64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes(($reset -replace "`r", '')))
+  $oldEA = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+  & ssh @sshOpts $target "echo $b64 | base64 -d | bash" 2>$null | Out-Null
+  $ErrorActionPreference = $oldEA
+}
+
 $oldEA = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
 $link = (& ssh @sshOpts $target 'cat /root/prometey-link.txt' 2>$null | Out-String).Trim()
 $ErrorActionPreference = $oldEA
@@ -243,7 +263,7 @@ if (-not $link) { $link = "http://$ip/" }
 Write-Host ""
 Write-Host "==================================================================" -ForegroundColor Green
 Write-Host "  ГОТОВО! ПРОМЕТЕЙ работает на сервере:  http://$ip" -ForegroundColor Green
-if ($link -match '#setup=') { Write-Host "  Сейчас откроется страница — создайте учётную запись руководителя." -ForegroundColor Green }
+if ($link -match '#setup=') { Write-Host "  Сейчас откроется страница — впишите свой e-mail (это логин) и пароль владельца." -ForegroundColor Green; Write-Host "  После этого CRM покажет КОД ВОССТАНОВЛЕНИЯ — сохраните его: по нему вы восстановите пароль сами." -ForegroundColor Green }
 elseif ($dataArg) { Write-Host "  Входите прежним логином и паролем — все данные перенесены." -ForegroundColor Green }
 Write-Host "==================================================================" -ForegroundColor Green
 try { Start-Process $link } catch {}

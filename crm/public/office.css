@@ -93,3 +93,6 @@
 .transfer-check{display:grid;gap:8px;border:1px solid #fecdca;background:#fffbfa;border-radius:12px;padding:12px}
 .transfer-check[hidden],.feed-attach[hidden]{display:none}
 a.btn{text-decoration:none}
+
+.recovery-code{font-size:22px;letter-spacing:.06em;text-align:center}
+.forgot-tabs{display:flex;margin:14px 0 4px}.forgot-tabs button{flex:1}

@@ -19,7 +19,7 @@ const UPLOADS_DIR=process.env.UPLOADS_DIR||path.join(path.dirname(DB_FILE),'uplo
 const Files=require('./lib/files').createFiles({dir:UPLOADS_DIR});
 const Feed=require('./lib/feed'),feedApi=Feed.createFeed({settings:require('./lib/admin').settings,dir:UPLOADS_DIR});Documents.configure({files:Files});
 const Transfer=require('./lib/transfer').createTransfer({store,version:require('./package.json').version,dirs:{uploads:UPLOADS_DIR,documents:DOCUMENTS_DIR,recordings:process.env.RECORDINGS_DIR||path.join(path.dirname(DB_FILE),'recordings')},backupDir:process.env.BACKUP_DIR||path.join(path.dirname(DB_FILE),'backups')});
-const Onboarding=require('./lib/onboarding').createOnboarding();store.transaction(d=>({changed:Onboarding.prepare(d)}));
+const Onboarding=require('./lib/onboarding').createOnboarding();const Recovery=require('./lib/recovery').createRecovery();store.transaction(d=>({changed:Onboarding.prepare(d)}));
 Security.bootstrapPasswords(store,process.env);
 const recordingHandler=require('./lib/recordings').createRecordings(store,CRM,process.env.RECORDINGS_DIR||path.join(path.dirname(DB_FILE),'recordings'));
 const telephony=require('./lib/telephony').createTelephony(store,process.env,process.env.RECORDINGS_DIR||path.join(path.dirname(DB_FILE),'recordings'));
@@ -60,7 +60,7 @@ function authenticate(req){const data=store.read(),auth=currentSession(req,data)
 function pruneSessions(data){const now=Date.now();data.sessions=(data.sessions||[]).filter(s=>Date.parse(s.expiresAt)>now);if(data.sessions.length>5000)data.sessions=data.sessions.slice(-5000)}
 
 // Новый сеанс после входа, первой регистрации или регистрации по приглашению.
-function startSession(req,res,user,data,password){const raw=crypto.randomBytes(32).toString('base64url'),now=new Date(),expires=new Date(now.getTime()+SESSION_MS);store.transaction(d=>{pruneSessions(d);const mine=d.sessions.filter(s=>s.userId===user.id);if(mine.length>=MAX_SESSIONS_PER_USER){const drop=new Set(mine.slice(0,mine.length-MAX_SESSIONS_PER_USER+1).map(s=>s.id));d.sessions=d.sessions.filter(s=>!drop.has(s.id))}const u=d.users.find(x=>x.id===user.id);if(u&&password!==undefined&&!Security.isHash(u.passwordHash)){u.passwordHash=Security.hashPassword(password);delete u.password}if(u)u.lastLoginAt=now.toISOString();d.sessions.push({id:'sess_'+crypto.randomUUID(),tokenHash:Security.tokenHash(raw),userId:user.id,createdAt:now.toISOString(),expiresAt:expires.toISOString(),ip:clientIp(req),agent:String(req.headers['user-agent']||'').slice(0,160)});return {changed:true}});Security.setSessionCookie(res,raw,{secure:secureRequest(req),maxAge:Math.floor(SESSION_MS/1000)});const fresh=store.read(),u=fresh.users.find(x=>x.id===user.id)||user;return json(res,200,{token:raw,user:{...Security.publicUser(u),perms:Access.perms(fresh,u)}})}
+function startSession(req,res,user,data,password,extra={}){const raw=crypto.randomBytes(32).toString('base64url'),now=new Date(),expires=new Date(now.getTime()+SESSION_MS);store.transaction(d=>{pruneSessions(d);const mine=d.sessions.filter(s=>s.userId===user.id);if(mine.length>=MAX_SESSIONS_PER_USER){const drop=new Set(mine.slice(0,mine.length-MAX_SESSIONS_PER_USER+1).map(s=>s.id));d.sessions=d.sessions.filter(s=>!drop.has(s.id))}const u=d.users.find(x=>x.id===user.id);if(u&&password!==undefined&&!Security.isHash(u.passwordHash)){u.passwordHash=Security.hashPassword(password);delete u.password}if(u)u.lastLoginAt=now.toISOString();d.sessions.push({id:'sess_'+crypto.randomUUID(),tokenHash:Security.tokenHash(raw),userId:user.id,createdAt:now.toISOString(),expiresAt:expires.toISOString(),ip:clientIp(req),agent:String(req.headers['user-agent']||'').slice(0,160)});return {changed:true}});Security.setSessionCookie(res,raw,{secure:secureRequest(req),maxAge:Math.floor(SESSION_MS/1000)});const fresh=store.read(),u=fresh.users.find(x=>x.id===user.id)||user;return json(res,200,{token:raw,user:{...Security.publicUser(u),perms:Access.perms(fresh,u)},...extra})}
 // Запрос с этого же компьютера (не через прокси): только так можно создать первую учётную запись без ссылки из установщика.
 const isLoopback=req=>/^(127\.|::1$|::ffff:127\.)/.test(String(req.socket?.remoteAddress||''))&&!req.headers['x-forwarded-for']&&!req.headers['x-real-ip']&&!req.headers.forwarded;
 // Адрес CRM для ссылок-приглашений: как открыли (если не localhost), иначе адрес в офисной сети.
@@ -144,10 +144,16 @@ async function api(req,res,url){
   loginSucceeded(req,body.email);return startSession(req,res,user,data,body.password)
  }
  if(url.pathname==='/api/setup'&&req.method==='GET')return json(res,200,Onboarding.setupInfo(store.read()));
- if(url.pathname==='/api/setup'&&req.method==='POST'){const owner=store.transaction(d=>({changed:true,body:Onboarding.setup(d,body,{local:isLoopback(req)})})).body;return startSession(req,res,owner,store.read())}
+ if(url.pathname==='/api/setup'&&req.method==='POST'){const r=store.transaction(d=>{const owner=Onboarding.setup(d,body,{local:isLoopback(req)});return {changed:true,body:{owner,code:Recovery.issueCode(owner)}}}).body;return startSession(req,res,r.owner,store.read(),undefined,{recoveryCode:r.code})}
  const invite=url.pathname.match(/^\/api\/invite\/([A-Za-z0-9_-]{16,64})$/);
  if(invite&&req.method==='GET')return json(res,200,Onboarding.inviteInfo(store.read(),invite[1]));
- if(invite&&req.method==='POST'){const nu=store.transaction(d=>({changed:true,body:Onboarding.accept(d,invite[1],body,{canAddUser:n=>License.canAddUser(n)})})).body;return startSession(req,res,nu,store.read())}
+ if(invite&&req.method==='POST'){const r=store.transaction(d=>{const nu=Onboarding.accept(d,invite[1],body,{canAddUser:n=>License.canAddUser(n)});return {changed:true,body:{nu,code:Recovery.issueCode(nu)}}}).body;return startSession(req,res,r.nu,store.read(),undefined,{recoveryCode:r.code})}
+ // восстановление пароля (без входа)
+ if(url.pathname==='/api/password/recover'&&req.method==='POST'){const email=String(body.email||'');loginAllowed(req,email);let r;try{r=store.transaction(d=>({changed:true,body:Recovery.recover(d,body)})).body}catch(e){if(e.code==='recovery_invalid')loginFailed(req,email);throw e}loginSucceeded(req,email);return startSession(req,res,r.user,store.read(),undefined,{recoveryCode:r.recoveryCode})}
+ if(url.pathname==='/api/password/request'&&req.method==='POST'){const email=String(body.email||'');loginAllowed(req,email);loginFailed(req,'request:'+email);return json(res,200,store.transaction(d=>({changed:true,body:Recovery.request(d,body,{ip:clientIp(req)})})).body)}
+ const resetRoute=url.pathname.match(/^\/api\/password\/reset\/([A-Za-z0-9_-]{16,64})$/);
+ if(resetRoute&&req.method==='GET')return json(res,200,Recovery.resetInfo(store.read(),resetRoute[1]));
+ if(resetRoute&&req.method==='POST'){const r=store.transaction(d=>({changed:true,body:Recovery.resetByLink(d,resetRoute[1],body)})).body;return startSession(req,res,r.user,store.read(),undefined,{recoveryCode:r.recoveryCode})}
  if(url.pathname==='/api/session'&&req.method==='GET'){const data=store.read(),auth=currentSession(req,data);return json(res,200,{user:auth?Security.publicUser(auth.user):null})}
  const {raw,user}=authenticate(req);
  // Согласие с политикой обработки персональных данных — до любой работы в CRM.
@@ -165,6 +171,10 @@ async function api(req,res,url){
  if(url.pathname==='/api/admin/transfer/export'&&req.method==='GET'){const r=Transfer.exportArchive(user);return sendBuffer(res,r.zip,'application/zip',r.name)}
  if(transferImport&&req.method==='POST'){if(!Access.perms(store.read(),user).admin)throw Object.assign(new Error('Загружать данные может администратор'),{status:403});return json(res,200,await Transfer.importArchive(user,await readRaw(req,Transfer.MAX_ARCHIVE)))}
  if(url.pathname==='/api/archive/messages'&&req.method==='GET'){const d=store.read();const r=Transfer.personalArchive(user,{orders:CRM.scopes?CRM.scopes.sharedOrderScope(d,user):[]});return sendBuffer(res,Buffer.from(r.html),'text/html; charset=utf-8',r.name)}
+ const resetLink=url.pathname.match(/^\/api\/admin\/users\/([^/]+)\/reset-link$/);
+ if(resetLink&&req.method==='POST')return json(res,201,store.transaction(d=>({changed:true,body:Recovery.adminLink(d,user,decodeURIComponent(resetLink[1]),publicBase(req))})).body);
+ if(url.pathname==='/api/admin/password-requests'&&req.method==='GET')return json(res,200,Recovery.requests(store.read(),user));
+ if(url.pathname==='/api/profile/recovery-code'&&req.method==='POST')return json(res,200,store.transaction(d=>({changed:true,body:Recovery.profileCode(d,user,body)})).body);
  if(url.pathname==='/api/admin/invites'||url.pathname.startsWith('/api/admin/invites/')){const r=store.transaction(d=>({changed:req.method!=='GET',body:Onboarding.admin(d,user,req.method,url,body,publicBase(req))}));return json(res,req.method==='POST'?201:200,r.body)}
  if(url.pathname==='/api/admin/server'||url.pathname.startsWith('/api/admin/server/')){serverAdminApi||=require('./lib/server-admin').createServerAdmin({root:ROOT,dbFile:DB_FILE,port:()=>server.address()?.port||Number(process.env.PORT||3030)});return json(res,200,await serverAdminApi(user,req.method,url,body,store.read()))}
  if(url.pathname==='/api/admin'||url.pathname.startsWith('/api/admin/')||url.pathname.startsWith('/api/profile')){const r=store.transaction(d=>adminApi(d,user,req.method,url,body,{tokenHash:Security.tokenHash(raw)}));return json(res,r.status,r.body)}

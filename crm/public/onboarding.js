@@ -15,7 +15,7 @@ function wirePerson(){const pass=document.getElementById('ob-pass'),email=docume
  pass.addEventListener('input',draw);email.addEventListener('input',draw);draw();
  document.getElementById('ob-eye').onclick=()=>{pass.type=pass.type==='password'?'text':'password';pass.focus()}}
 const personBody=()=>({name:val('ob-name').trim(),email:val('ob-email').trim(),phone:val('ob-phone').trim(),password:document.getElementById('ob-pass').value});
-async function afterRegister(r){token='';me=r.user;history.replaceState(null,'',location.pathname);window.__justRegistered=true;renderApp()}
+async function afterRegister(r){token='';me=r.user;history.replaceState(null,'',location.pathname);window.__justRegistered=true;window.__recoveryCode=r.recoveryCode||'';renderApp()}
 
 // Новая установка: первый член команды создаёт учётную запись руководителя.
 function renderSetup(info={}){
@@ -47,6 +47,7 @@ async function renderInvite(inviteToken){
 async function startOnboardingOrLogin(){
  const params=new URLSearchParams(location.hash.slice(1));
  if(params.get('invite'))return renderInvite(params.get('invite'));
+ if(params.get('reset'))return renderReset(params.get('reset'));
  try{const s=await (await fetch('/api/setup')).json();if(s.needed)return renderSetup(s)}catch{}
  renderLogin();
 }
@@ -77,5 +78,57 @@ async function adminInvites(box){
  box.querySelectorAll('[data-invite-revoke]').forEach(b=>b.onclick=async()=>{try{await api('/api/admin/invites/'+b.dataset.inviteRevoke,{method:'DELETE'});toast('Ссылка отозвана');renderPage()}catch(e){toast(e.message,true)}});
 }
 // После первой регистрации руководителя — сразу предложить пригласить команду.
-function welcomeOwner(){if(!window.__justRegistered||!can('users'))return;window.__justRegistered=false;
+function welcomeOwner(){if(window.__recoveryCode){const c=window.__recoveryCode;window.__recoveryCode='';return showRecoveryCode(c,()=>setTimeout(welcomeOwner,60))}
+ if(!window.__justRegistered||!can('users'))return;window.__justRegistered=false;
  sheet('Готово! Пригласите команду',`<p>Ваша CRM работает. Теперь пригласите коллег: создайте ссылку и отправьте её в WhatsApp, Telegram или по почте — каждый сам зарегистрируется.</p>`,[{text:'Пригласить сотрудника',cls:'btn-primary',onClick:()=>setTimeout(()=>inviteDialog().catch(e=>toast(e.message,true)),60)},{text:'Позже',cls:'btn-light',onClick:()=>{}}])}
+
+// ---------- Восстановление пароля ----------
+// Код восстановления показывается один раз — после регистрации, восстановления или смены в профиле.
+function showRecoveryCode(code,then){
+ const done=()=>{if(typeof then==='function')then()};
+ sheet('Ваш код восстановления',`<p>Если забудете пароль, войти можно будет по этому коду: «Забыли пароль?» на странице входа.</p><div class="invite-link recovery-code" id="rc-code">${esc(code)}</div><p class="muted small">Запишите его или сохраните файлом и держите отдельно от пароля. Код показывается только сейчас. После использования выдаётся новый.</p>`,
+  [{text:'Скопировать',cls:'btn-light',close:false,onClick:()=>copyText(code)},
+   {text:'Сохранить файлом',cls:'btn-light',close:false,onClick:()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([`ПРОМЕТЕЙ CRM — код восстановления\r\n${me?.email||''}\r\n\r\n${code}\r\n\r\nВход без пароля: страница входа → «Забыли пароль?» → «У меня есть код».\r\n`],{type:'text/plain'}));a.download='prometey-kod-vosstanovleniya.txt';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000)}},
+   {text:'Я сохранил код',cls:'btn-primary',onClick:done}]);
+}
+function renderForgot(mode='code'){
+ onboardShell('Забыли пароль?',mode==='code'?'Введите e-mail, код восстановления (выдаётся при регистрации) и новый пароль.':'Нет кода? Руководитель пришлёт вам ссылку для нового пароля.',
+ `<div class="segmented forgot-tabs"><button type="button" data-fg="code" class="${mode==='code'?'active':''}">У меня есть код</button><button type="button" data-fg="ask" class="${mode==='ask'?'active':''}">Попросить руководителя</button></div>
+ ${mode==='code'?`<form id="fg-form"><label for="ob-email">E-mail</label><input class="field" id="ob-email" type="email" required autocomplete="username">
+  <label for="fg-code">Код восстановления</label><input class="field" id="fg-code" required autocomplete="off" placeholder="XXXX-XXXX-XXXX-XXXX" style="text-transform:uppercase;font-family:Consolas,monospace">
+  <label for="ob-pass">Новый пароль</label><div class="pass-wrap"><input class="field" type="password" id="ob-pass" required autocomplete="new-password"><button type="button" class="pass-eye" id="ob-eye" aria-label="Показать пароль">👁</button></div><ul class="pw-checks" id="ob-checks"></ul>
+  <button class="btn btn-primary w100 login-submit" id="fg-go">Задать пароль и войти</button></form>`
+ :`<form id="fg-form"><label for="ob-email">Ваш e-mail (логин)</label><input class="field" id="ob-email" type="email" required autocomplete="username">
+  <button class="btn btn-primary w100 login-submit" id="fg-go">Отправить запрос руководителю</button></form><p class="muted small">Руководитель увидит запрос в «Администрирование → Сотрудники» и пришлёт ссылку. Можно и просто написать ему.</p>`}
+ <p class="small"><a href="#" id="fg-back">← Вернуться ко входу</a></p>`);
+ document.querySelectorAll('[data-fg]').forEach(b=>b.onclick=()=>renderForgot(b.dataset.fg));
+ document.getElementById('fg-back').onclick=e=>{e.preventDefault();renderLogin()};
+ if(mode==='code')wirePerson();
+ document.getElementById('fg-form').onsubmit=async e=>{e.preventDefault();const b=document.getElementById('fg-go');b.disabled=true;
+  try{
+   if(mode==='code'){const r=await api('/api/password/recover',{method:'POST',body:JSON.stringify({email:val('ob-email').trim(),code:val('fg-code'),password:document.getElementById('ob-pass').value})});await afterRegister(r)}
+   else{const r=await api('/api/password/request',{method:'POST',body:JSON.stringify({email:val('ob-email').trim()})});onboardShell('Запрос отправлен',esc(r.message),`<button class="btn btn-primary w100 login-submit" id="fg-ok">Ко входу</button>`);document.getElementById('fg-ok').onclick=()=>renderLogin()}
+  }catch(err){toast(err.message,true)}finally{b.disabled=false}};
+}
+// Открыта ссылка «новый пароль» от руководителя
+async function renderReset(resetToken){
+ let info;try{const r=await fetch('/api/password/reset/'+encodeURIComponent(resetToken));info=await r.json()}catch{info={error:'CRM не отвечает'}}
+ if(!info||info.error){onboardShell('Ссылка не работает',esc(info?.error||'Ссылка недействительна'),`<button class="btn btn-primary w100 login-submit" id="ob-login">Ко входу</button>`);document.getElementById('ob-login').onclick=()=>{history.replaceState(null,'',location.pathname);renderLogin()};return}
+ onboardShell('Новый пароль',`${esc(info.name)} · ${esc(info.email)}. Придумайте новый пароль.`,`<form id="fg-form"><input type="hidden" id="ob-email" value="${esc(info.email)}">
+  <label for="ob-pass">Новый пароль</label><div class="pass-wrap"><input class="field" type="password" id="ob-pass" required autocomplete="new-password"><button type="button" class="pass-eye" id="ob-eye" aria-label="Показать пароль">👁</button></div><ul class="pw-checks" id="ob-checks"></ul>
+  <button class="btn btn-primary w100 login-submit" id="fg-go">Сохранить и войти</button></form>`);
+ wirePerson();
+ document.getElementById('fg-form').onsubmit=async e=>{e.preventDefault();const b=document.getElementById('fg-go');b.disabled=true;try{await afterRegister(await api('/api/password/reset/'+encodeURIComponent(resetToken),{method:'POST',body:JSON.stringify({password:document.getElementById('ob-pass').value})}))}catch(err){toast(err.message,true)}finally{b.disabled=false}};
+}
+// Руководитель: ссылка для нового пароля сотрудника
+async function resetLinkFor(userId){
+ const r=await api(`/api/admin/users/${encodeURIComponent(userId)}/reset-link`,{method:'POST',body:'{}'});const link=r.url||(location.origin+'/'+r.link);
+ sheet('Ссылка для нового пароля',`<p>Отправьте ссылку сотруднику <b>${esc(r.name)}</b> в мессенджер. По ней он сам задаст новый пароль. Действует 24 часа, один раз.</p><div class="invite-link">${esc(link)}</div>${r.networkOff||!r.url?'<p class="code-note">Ссылка ведёт на этот компьютер — коллеги откроют её только если включён доступ из офисной сети.</p>':''}`,
+  [{text:'Скопировать ссылку',cls:'btn-primary',close:false,onClick:()=>copyText(link)},{text:'Готово',cls:'btn-light',onClick:()=>{if(current==='admin')renderPage()}}]);
+}
+async function adminPasswordRequests(box){
+ let list=[];try{list=await api('/api/admin/password-requests')}catch{return}
+ if(!list.length){box.remove();return}
+ box.innerHTML=`<div class="panel invite-panel" style="border-color:#f0a36d"><b>Просят новый пароль</b>${list.map(x=>`<div class="invite-head"><div>${esc(x.name)} <span class="muted small">${esc(x.email)} · ${esc(fmtDateTime(x.at))}</span></div><button class="btn btn-primary btn-sm" data-reset-for="${esc(x.userId)}">Создать ссылку</button></div>`).join('')}</div>`;
+ box.querySelectorAll('[data-reset-for]').forEach(b=>b.onclick=()=>resetLinkFor(b.dataset.resetFor).catch(e=>toast(e.message,true)));
+}

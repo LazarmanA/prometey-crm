@@ -25,7 +25,7 @@ function verifyPassword(stored,password){
 // Spends the same scrypt time as a real check, so a missing account cannot be told apart by response time.
 function burnPasswordCheck(password){verifyPassword(DUMMY_HASH,password);return false}
 function tokenHash(token){return crypto.createHash('sha256').update(String(token||'')).digest('hex')}
-function publicUser(user){const {password,passwordHash,envCredential,...safe}=user;return safe}
+function publicUser(user){const {password,passwordHash,envCredential,recoveryCodeHash,...safe}=user;return safe}
 function bootstrapPasswords(store,env=process.env){
  const production=env.NODE_ENV==='production';
  const roleOverrides={

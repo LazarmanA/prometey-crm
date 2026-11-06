@@ -29,6 +29,9 @@ const PNG=Buffer.from('89504e470d0a1a0a0000000d494844520000004000000030080200000
  await page.locator('#ob-go').click();
  // согласие с политикой ПДн
  await page.locator('#consent-agree').waitFor();await page.locator('#consent-agree').check();await page.locator('#consent-ok').click();
+ await page.getByText('Ваш код восстановления').waitFor();const ownerCode=(await page.locator('#rc-code').innerText()).trim();ok(/^[A-Z2-9]{4}(-[A-Z2-9]{4}){3}$/.test(ownerCode),'owner sees a recovery code right after registration');
+ if(SHOTS)await page.screenshot({path:path.join(SHOTS,'2a-code.png')});
+ await page.locator('.modal-foot').getByRole('button',{name:'Я сохранил код'}).click();
  await page.getByText('Готово! Пригласите команду').waitFor();ok(true,'after registration CRM offers to invite the team');
  if(SHOTS)await page.screenshot({path:path.join(SHOTS,'2-welcome.png')});
  await page.locator('.modal-foot').getByRole('button',{name:'Пригласить сотрудника'}).click();
@@ -47,6 +50,7 @@ const PNG=Buffer.from('89504e470d0a1a0a0000000d494844520000004000000030080200000
  if(SHOTS)await p2.screenshot({path:path.join(SHOTS,'4-invite-phone.png')});
  await p2.locator('#ob-name').fill('Ольга Петрова');await p2.locator('#ob-email').fill('olga@kran.ru');await p2.locator('#ob-pass').fill('Olga-Kran-2026!');await p2.locator('#ob-go').click();
  await p2.locator('#consent-agree').waitFor();await p2.locator('#consent-agree').check();await p2.locator('#consent-ok').click();
+ await p2.getByText('Ваш код восстановления').waitFor();await p2.locator('.modal-foot').getByRole('button',{name:'Я сохранил код'}).click();
  await p2.locator('.nav').waitFor();ok(!(await p2.url()).includes('invite='),'employee is inside CRM; link removed from the address bar');
  // 3. руководитель видит сотрудника и пишет в ленту с файлами
  await page.reload();await page.locator('.nav').waitFor();
@@ -79,6 +83,15 @@ const PNG=Buffer.from('89504e470d0a1a0a0000000d494844520000004000000030080200000
  ok(await page.locator('#tr-go').isDisabled(),'replace button locked until ЗАМЕНИТЬ is typed');
  await page.locator('#tr-confirm').fill('заменить');await page.locator('#tr-go').click();await page.getByText('Данные перенесены').waitFor({timeout:30000});ok(true,'archive loaded back from the browser');
  await page.locator('.modal-foot').getByRole('button',{name:'Перейти ко входу'}).click();await page.locator('#login-email').fill('boss@kran.ru');await page.locator('#login-pass').fill('Kran-Boss-2026!');await page.locator('#login-pass').press('Enter');await page.locator('.nav').waitFor();ok(true,'owner signs in again after the transfer');
+ // забыли пароль: вход по коду восстановления
+ const c3=await browser.newContext({viewport:{width:1366,height:900},reducedMotion:'reduce'});const p3=await c3.newPage();p3.on('pageerror',e=>errors.push(e.message));
+ await p3.addInitScript(()=>{try{localStorage.setItem('prometey_intro_seen','1')}catch{}});
+ await p3.goto(BASE+'/');await p3.locator('#login-forgot').click();await p3.locator('#fg-code').waitFor();
+ if(SHOTS)await p3.screenshot({path:path.join(SHOTS,'9-forgot.png')});
+ await p3.locator('#ob-email').fill('boss@kran.ru');await p3.locator('#fg-code').fill(ownerCode.toLowerCase());await p3.locator('#ob-pass').fill('Kran-Boss-2027!x');await p3.locator('#fg-go').click();
+ await p3.getByText('Ваш код восстановления').waitFor();const code2=(await p3.locator('#rc-code').innerText()).trim();ok(code2!==ownerCode,'«Забыли пароль?» → вход по коду, выдан новый код');
+ await p3.locator('.modal-foot').getByRole('button',{name:'Я сохранил код'}).click();await p3.locator('.nav').waitFor();ok(true,'owner is inside CRM with the new password');
+ await p3.locator('#login-forgot').count();
  assert.deepEqual(errors,[]);ok(true,'no browser errors');
  console.log(`OK team UI: ${checks} checks`);
 }catch(e){console.error(e);process.exitCode=1}finally{try{await browser?.close()}catch{};try{srv?.kill()}catch{};fs.rmSync(temp,{recursive:true,force:true})}})();
