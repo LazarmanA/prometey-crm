@@ -127,7 +127,9 @@ ufw allow 80/tcp >/dev/null
 ufw allow 443/tcp >/dev/null
 ufw --force enable >/dev/null
 mkdir -p /etc/fail2ban/jail.d
-printf '[sshd]\nenabled = true\nport = %s\nmaxretry = 6\nbantime = 1h\n' "$(echo $SSH_PORTS | tr ' ' ',')" > /etc/fail2ban/jail.d/prometey-sshd.conf
+# защита от подбора паролей; компьютер, с которого ставят CRM (адрес из текущего подключения), не блокируется никогда
+ADMIN_IP=$(echo "${SSH_CONNECTION:-}" | awk '{print $1}')
+printf '[sshd]\nenabled = true\nport = %s\nmaxretry = 10\nfindtime = 10m\nbantime = 15m\nignoreip = 127.0.0.1/8 ::1 %s\n' "$(echo $SSH_PORTS | tr ' ' ',')" "$ADMIN_IP" > /etc/fail2ban/jail.d/prometey-sshd.conf
 systemctl enable --now fail2ban >/dev/null 2>&1 || true
 systemctl restart fail2ban >/dev/null 2>&1 || true
 c_ok "Брандмауэр включён: открыты только SSH ($SSH_PORTS), 80 и 443"

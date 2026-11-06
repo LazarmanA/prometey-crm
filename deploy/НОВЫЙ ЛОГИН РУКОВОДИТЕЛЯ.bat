@@ -30,6 +30,13 @@ T=$(head -c 18 /dev/urandom | base64 | tr '+/' '-_' | tr -d '=\n')
 sed -i '/^PROMETEY_SETUP=/d;/^PROMETEY_SETUP_TOKEN=/d;/^PROMETEY_RESET_OWNER=/d;/^PROMETEY_ADMIN_EMAIL=/d;/^PROMETEY_ADMIN_PASSWORD=/d;/^PROMETEY_ADMIN_MUST_CHANGE=/d' "$F"
 printf 'PROMETEY_SETUP=1\nPROMETEY_SETUP_TOKEN=%s\nPROMETEY_RESET_OWNER=%s\n' "$T" "$T" >> "$F"
 systemctl restart prometey
+# защита от подбора паролей: мягче, и этот компьютер (адрес подключения) не блокируется
+C=$(echo "${SSH_CONNECTION:-}" | awk '{print $1}')
+if [ -d /etc/fail2ban/jail.d ]; then
+  P=$(grep -h '^port' /etc/fail2ban/jail.d/prometey-sshd.conf 2>/dev/null | head -1 | awk -F= '{gsub(/ /,"",$2);print $2}'); P=${P:-22}
+  printf '[sshd]\nenabled = true\nport = %s\nmaxretry = 10\nfindtime = 10m\nbantime = 15m\nignoreip = 127.0.0.1/8 ::1 %s\n' "$P" "$C" > /etc/fail2ban/jail.d/prometey-sshd.conf
+  fail2ban-client reload >/dev/null 2>&1 || true; fail2ban-client unban --all >/dev/null 2>&1 || true
+fi
 for i in $(seq 1 30); do R=$(curl -s --max-time 3 http://127.0.0.1/api/setup || true); case "$R" in *needed*) break;; esac; sleep 1; done
 echo "SETUP=$R"
 echo "TOKEN=$T"
@@ -39,6 +46,7 @@ $oldEA = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
 $b64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes(($remote -replace "`r", '')))
 $out = (& ssh @opts "root@$ip" "echo $b64 | base64 -d | bash" 2>&1 | Out-String)
 $ErrorActionPreference = $oldEA
+if ($out -match 'timed out|Connection refused|reset') { Fail "Сервер сейчас не пускает этот компьютер по SSH. Сайт CRM при этом работает. Скорее всего, сработала защита от подбора паролей после прошлых попыток — она снимается сама через час. Чтобы не ждать: включите на телефоне раздачу интернета, подключите к ней компьютер и запустите этот файл ещё раз (у телефона другой адрес, его сервер пустит)." }
 if ($out -match 'Permission denied') { Fail "Сервер не принял ключ доступа. Запустите сначала «РАЗМЕСТИТЬ НА СЕРВЕРЕ» (он спросит пароль root и настроит ключ), затем этот файл." }
 $token = ([regex]::Match($out, 'TOKEN=([A-Za-z0-9_-]{20,})')).Groups[1].Value
 if (-not $token -or $out -notmatch '"needed":true') { Write-Host $out; Fail "CRM на сервере не перешла в режим восстановления доступа. Сделайте снимок экрана и пришлите его." }

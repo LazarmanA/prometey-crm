@@ -71,11 +71,17 @@ $old = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
 $ErrorActionPreference = $old
 
 # --- ждём, пока сервер ответит (после перезагрузки или переустановки — до 15 минут) ---
+# Сервер жив, если на порту SSH он присылает приветствие «SSH-…». Без попыток входа —
+# чтобы защита сервера от подбора паролей (fail2ban) не приняла проверки за атаку и не заблокировала этот компьютер.
 function Probe {
-  $old = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-  try { $out = (& ssh @base -o BatchMode=yes -o ConnectTimeout=20 -o PreferredAuthentications=none $target 'true' 2>&1 | Out-String) } finally { $ErrorActionPreference = $old }
-  # «Permission denied» = сервер жив и спрашивает пароль; всё остальное — не отвечает
-  return ($out -match 'Permission denied|publickey|password|keyboard-interactive' -or $LASTEXITCODE -eq 0)
+  try {
+    $c = New-Object Net.Sockets.TcpClient
+    $iar = $c.BeginConnect($ip, [int]$port, $null, $null)
+    if (-not $iar.AsyncWaitHandle.WaitOne(15000)) { $c.Close(); return $false }
+    $c.EndConnect($iar); $st = $c.GetStream(); $st.ReadTimeout = 15000
+    $buf = New-Object byte[] 64; $n = $st.Read($buf, 0, 64); $c.Close()
+    return ([Text.Encoding]::ASCII.GetString($buf, 0, $n) -like 'SSH-*')
+  } catch { return $false }
 }
 Info "Проверяю, отвечает ли сервер…"
 $alive = $false; $sw = [Diagnostics.Stopwatch]::StartNew(); $warned = $false
