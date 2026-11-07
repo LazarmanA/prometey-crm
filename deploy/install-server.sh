@@ -151,6 +151,14 @@ if [[ "$WITH_PDF" == "yes" ]] && ! command -v soffice >/dev/null 2>&1; then
   apt-get install -y -q --no-install-recommends libreoffice-writer fonts-dejavu fonts-liberation
   c_ok "LibreOffice установлен"
 fi
+# Счета и договоры с подписью и печатью точнее всего печатает браузер (как в предпросмотре).
+if [[ "$WITH_PDF" == "yes" ]] && ! command -v google-chrome >/dev/null 2>&1 && ! command -v chromium >/dev/null 2>&1; then
+  c_info "Ставлю Google Chrome для печати документов…"
+  if curl -fsSL --max-time 180 -o /tmp/prometey-chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
+     && apt-get install -y -q /tmp/prometey-chrome.deb >/dev/null; then c_ok "Google Chrome установлен"
+  else c_warn "Chrome не скачался — документы будут печататься через LibreOffice (печать встанет рядом с подписью)"; fi
+  rm -f /tmp/prometey-chrome.deb
+fi
 
 # =====================================================================
 step "3/7  Программа"

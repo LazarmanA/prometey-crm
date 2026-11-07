@@ -211,4 +211,4 @@ server.headersTimeout=20000;server.requestTimeout=180000;server.keepAliveTimeout
 if(require.main===module){server.listen(Number(process.env.PORT||config.port||3030),process.env.HOST||'127.0.0.1',()=>console.log(`ПРОМЕТЕЙ ${VERSION}: http://${server.address().address}:${server.address().port}`));const shutdown=signal=>{console.log(`${signal}: graceful shutdown`);server.closeIdleConnections?.();server.close(()=>process.exit(0));setTimeout(()=>{server.closeAllConnections?.();process.exit(1)},10000).unref()};process.once('SIGTERM',()=>shutdown('SIGTERM'));process.once('SIGINT',()=>shutdown('SIGINT'))}
 server.on('listening',()=>{License.start();Avito.start()});
 server.on('close',()=>{License.stop();Avito.stop();store.close()});
-module.exports=server;
+server.store=store;module.exports=server;

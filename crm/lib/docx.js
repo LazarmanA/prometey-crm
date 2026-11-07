@@ -53,6 +53,11 @@ const FIELDS=[
   ['НДС','Сумма НДС',c=>money(c.totals.vatTotal)],
   ['СтавкаНДС','Ставка НДС: 22%',c=>c.totals.vatRate?c.totals.vatRate+'%':'Без НДС'],
  ]],
+ ['Подпись и печать (картинки из «Администрирование → Компания»)',[
+  ['Подпись','Факсимиле подписи руководителя',()=>IMG('signature')],
+  ['Печать','Печать организации (ставится поверх текста рядом)',()=>IMG('stamp')],
+  ['Логотип','Логотип организации',()=>IMG('logo')],
+ ]],
  ['Строка таблицы (повторяется для каждой позиции)',[
   ['Строка.№','Номер строки',(c,i,n)=>String(n+1)],
   ['Строка.Наименование','Наименование',(c,i)=>i.description],
@@ -62,8 +67,52 @@ const FIELDS=[
   ['Строка.Сумма','Сумма',(c,i)=>money(i.gross)],
  ]],
 ];
+// Картинки: в тексте ставится метка, потом она заменяется рисунком Word.
+const IMG=k=>'\u27e6IMG:'+k+'\u27e7';
+const IMG_RE=/\u27e6IMG:(signature|stamp|logo)\u27e7/g;
+const EMU=9525; // 1 px (96 dpi) в EMU
+function imageSize(buf){
+ if(buf.length>24&&buf.readUInt32BE(0)===0x89504e47)return {w:buf.readUInt32BE(16),h:buf.readUInt32BE(20),ext:'png',mime:'image/png'};
+ if(buf[0]===0xff&&buf[1]===0xd8){let i=2;while(i+9<buf.length){if(buf[i]!==0xff){i++;continue}const m=buf[i+1],len=buf.readUInt16BE(i+2);if(m>=0xc0&&m<=0xcf&&![0xc4,0xc8,0xcc].includes(m))return {h:buf.readUInt16BE(i+5),w:buf.readUInt16BE(i+7),ext:'jpeg',mime:'image/jpeg'};i+=2+len}}
+ return null;
+}
+// высота на листе: подпись 1,4 см, печать 4 см, логотип 1,6 см
+const IMG_H={signature:1.4,stamp:4,logo:1.6};
+function drawingXml(kind,img,rid,n){
+ const cy=Math.round(IMG_H[kind]*360000),cx=Math.round(cy*img.w/Math.max(1,img.h));
+ const graphic=`<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="${n}" name="${kind}.${img.ext}"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="${rid}" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic>`;
+ const WP='xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"';
+ if(kind!=='stamp')return `<w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0" ${WP}><wp:extent cx="${cx}" cy="${cy}"/><wp:docPr id="${n}" name="${kind}"/><wp:cNvGraphicFramePr/>${graphic}</wp:inline></w:drawing>`;
+ // печать — поверх текста, сдвинута влево-вверх от места метки, как ставят рукой
+ return `<w:drawing><wp:anchor distT="0" distB="0" distL="0" distR="0" simplePos="0" relativeHeight="251659264" behindDoc="0" locked="0" layoutInCell="1" allowOverlap="1" ${WP}><wp:simplePos x="0" y="0"/><wp:positionH relativeFrom="character"><wp:posOffset>${-Math.round(cx*0.2)}</wp:posOffset></wp:positionH><wp:positionV relativeFrom="line"><wp:posOffset>${-Math.round(cy*0.4)}</wp:posOffset></wp:positionV><wp:extent cx="${cx}" cy="${cy}"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:wrapNone/><wp:docPr id="${n}" name="${kind}"/><wp:cNvGraphicFramePr/>${graphic}</wp:anchor></w:drawing>`;
+}
+// Метки картинок → рисунки (только в теле документа; в колонтитулах — пусто)
+function placeImages(files,out,images){
+ const used=new Map();let n=7100;
+ for(const [name,data] of out){
+  if(!PARTS.test(name))continue;let xml=data.toString('utf8');if(!xml.includes('\u27e6IMG:'))continue;
+  const body=name==='word/document.xml';
+  xml=xml.replace(/<w:t(\s[^>]*)?>([^<]*)<\/w:t>/g,(m,attr,text)=>{if(!text.includes('\u27e6IMG:'))return m;
+   return '<w:t xml:space="preserve">'+text.replace(IMG_RE,(x,kind)=>{const img=images?.[kind];
+    if(!img||!body)return kind==='signature'?'____________':'';
+    if(!used.has(kind))used.set(kind,{rid:'rIdPrm'+kind,file:'media/prometey-'+kind+'.'+img.ext,img});
+    return '</w:t>'+drawingXml(kind,img,used.get(kind).rid,n++)+'<w:t xml:space="preserve">'})+'</w:t>'});
+  out.set(name,Buffer.from(xml,'utf8'));
+ }
+ if(!used.size)return;
+ const relsName='word/_rels/document.xml.rels';
+ let rels=(out.get(relsName)||Buffer.from('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>')).toString('utf8');
+ let types=(out.get('[Content_Types].xml')||Buffer.from('')).toString('utf8');
+ for(const {rid,file,img} of used.values()){
+  out.set('word/'+file,img.buf);
+  rels=rels.replace(new RegExp('<Relationship[^>]*Id="'+rid+'"[^>]*/>','g'),'').replace('</Relationships>',`<Relationship Id="${rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="${file}"/></Relationships>`);
+  if(types&&!new RegExp('Extension="'+img.ext+'"','i').test(types))types=types.replace('</Types>',`<Default Extension="${img.ext}" ContentType="${img.mime}"/></Types>`);
+ }
+ out.set(relsName,Buffer.from(rels,'utf8'));if(types)out.set('[Content_Types].xml',Buffer.from(types,'utf8'));
+}
 const norm=s=>String(s).toLowerCase().replace(/ё/g,'е').replace(/[\s_]/g,'');
 const INDEX=new Map();for(const [,list] of FIELDS)for(const [key,,get] of list)INDEX.set(norm(key),{key,get,row:key.startsWith('Строка.')});
+for(const [alias,key] of [['Факсимиле','Подпись'],['МП','Печать'],['М.П.','Печать']])INDEX.set(norm(alias),INDEX.get(norm(key)));
 const fieldList=()=>FIELDS.map(([group,list])=>({group,fields:list.map(([key,label])=>({key,label,code:'{{'+key+'}}'}))}));
 
 const decode=s=>s.replace(/&(amp|lt|gt|quot|apos|#\d+|#x[0-9a-f]+);/gi,(m,e)=>({amp:'&',lt:'<',gt:'>',quot:'"',apos:"'"}[e.toLowerCase()]??String.fromCodePoint(e[1].toLowerCase()==='x'?parseInt(e.slice(2),16):parseInt(e.slice(1),10))));
@@ -124,6 +173,7 @@ function fill(buffer,ctx){
   xml=fillXml(xml,n=>{const f=INDEX.get(norm(n));if(!f)return undefined;return f.row?'':value(f)});
   out.set(name,Buffer.from(xml,'utf8'));
  }
+ placeImages(files,out,ctx.images);
  return writeZip(out);
 }
 
@@ -147,7 +197,7 @@ function sample(){
   p('Исполнитель: {{Наша.Наименование}}, ИНН {{Наша.ИНН}}, КПП {{Наша.КПП}}, {{Наша.Адрес}}, р/с {{Наша.РасчетныйСчет}} в {{Наша.Банк}}, БИК {{Наша.БИК}}, к/с {{Наша.КоррСчет}}'),
   p('Заказчик: {{Клиент.Наименование}}, ИНН {{Клиент.ИНН}}, КПП {{Клиент.КПП}}, {{Клиент.Адрес}}, тел. {{Клиент.Телефон}}'),
   p(''),
-  p('Исполнитель ____________ / {{Наша.ПодписантКратко}} /          Заказчик ____________'),
+  p('Исполнитель {{Подпись}}{{Печать}} / {{Наша.ПодписантКратко}} /          Заказчик ____________'),
  ].join('');
  const doc=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="850" w:bottom="1134" w:left="1418" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr></w:body></w:document>`;
  const styles=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial" w:eastAsia="Arial"/><w:sz w:val="22"/><w:lang w:val="ru-RU"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="120"/></w:pPr></w:pPrDefault></w:docDefaults></w:styles>`;
@@ -158,4 +208,4 @@ function sample(){
   ['word/document.xml',doc],['word/styles.xml',styles],
  ]));
 }
-module.exports={FIELDS,fieldList,inspect,fill,sample,fillXml,scanXml};
+module.exports={imageSize,FIELDS,fieldList,inspect,fill,sample,fillXml,scanXml};
