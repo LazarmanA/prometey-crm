@@ -47,16 +47,18 @@ function createFiles({dir}){
  function setLogo(d,u,b,CRM){
   const target=str(b.target),id=str(b.id);
   let x;
+  // для организации: logo — логотип, signature — подпись, stamp — печать
+  const field=target==='legalEntity'?({logo:'logo',signature:'signatureImage',stamp:'stampImage'}[str(b.kind)||'logo']):'logo';if(!field)fail('Неизвестный вид картинки');
   if(target==='legalEntity'){x=(d.legalEntities||[]).find(e=>e.id===id);if(!x)fail('Организация не найдена',404);if(!canSettings(d,u))fail('Логотип организации меняет руководитель',403)}
   else if(target==='client'){x=d.clients.find(c=>c.id===id);if(!x)fail('Компания не найдена',404);if(!canEditClient(d,u,x,CRM))fail('Нет права изменять эту компанию',403)}
   else fail('Неизвестный объект для логотипа');
-  if(b.remove){delete x.logo;x.updatedAt=now();audit(d,u,'logo.remove',target==='client'?'clients':'legalEntities',id,x.name);return {logo:null}}
+  if(b.remove){delete x[field];x.updatedAt=now();audit(d,u,'logo.remove',target==='client'?'clients':'legalEntities',id,x.name+(field!=='logo'?' · '+field:''));return {[field]:null}}
   const buf=decodeData(b.data,MAX_LOGO),type=imageType(buf);
   if(!type)fail('Логотип должен быть картинкой PNG, JPG или WebP');
   const fileId=write('logos',type.ext,buf);
-  x.logo={fileId,mime:type.mime,size:buf.length,updatedAt:now()};x.updatedAt=now();
-  audit(d,u,'logo.upload',target==='client'?'clients':'legalEntities',id,x.name);
-  return {logo:x.logo};
+  x[field]={fileId,mime:type.mime,size:buf.length,updatedAt:now()};x.updatedAt=now();
+  audit(d,u,'logo.upload',target==='client'?'clients':'legalEntities',id,x.name+(field!=='logo'?' · '+field:''));
+  return {[field]:x[field],logo:x.logo||null};
  }
 
  function uploadTemplate(d,u,b){

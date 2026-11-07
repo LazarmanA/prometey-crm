@@ -19,6 +19,7 @@ async function afterRegister(r){token='';me=r.user;history.replaceState(null,'',
 
 // Новая установка: первый член команды создаёт учётную запись руководителя.
 function renderSetup(info={}){
+ if(!info.reset&&typeof renderOrgWizard==='function')return renderOrgWizard(info);
  const params=new URLSearchParams(location.hash.slice(1)),setupToken=params.get('setup')||'';
  onboardShell(info.reset?'Восстановление доступа':'Добро пожаловать!',info.reset?'Укажите e-mail и новый пароль руководителя. Все данные CRM сохранятся.':'Создайте свою учётную запись — вы станете руководителем в CRM. Коллег пригласите потом по ссылке.',`<form id="ob-form" autocomplete="on">${personFields(!info.reset)}
   ${info.demo?`<label class="small ob-demo"><input type="checkbox" id="ob-clear" checked> Начать с чистой базы — убрать примеры (демо-компании, сделки, технику)</label>`:''}
@@ -79,6 +80,7 @@ async function adminInvites(box){
 }
 // После первой регистрации руководителя — сразу предложить пригласить команду.
 function welcomeOwner(){if(window.__recoveryCode){const c=window.__recoveryCode;window.__recoveryCode='';return showRecoveryCode(c,()=>setTimeout(welcomeOwner,60))}
+ if(window.__orgSetup&&window.__justRegistered&&can('settings')){window.__justRegistered=false;adminTab='company';current='admin';renderApp();return}
  if(!window.__justRegistered||!can('users'))return;window.__justRegistered=false;
  sheet('Готово! Пригласите команду',`<p>Ваша CRM работает. Теперь пригласите коллег: создайте ссылку и отправьте её в WhatsApp, Telegram или по почте — каждый сам зарегистрируется.</p>`,[{text:'Пригласить сотрудника',cls:'btn-primary',onClick:()=>setTimeout(()=>inviteDialog().catch(e=>toast(e.message,true)),60)},{text:'Позже',cls:'btn-light',onClick:()=>{}}])}
 
@@ -114,7 +116,7 @@ function renderForgot(mode='code'){
 async function renderReset(resetToken){
  let info;try{const r=await fetch('/api/password/reset/'+encodeURIComponent(resetToken));info=await r.json()}catch{info={error:'CRM не отвечает'}}
  if(!info||info.error){onboardShell('Ссылка не работает',esc(info?.error||'Ссылка недействительна'),`<button class="btn btn-primary w100 login-submit" id="ob-login">Ко входу</button>`);document.getElementById('ob-login').onclick=()=>{history.replaceState(null,'',location.pathname);renderLogin()};return}
- onboardShell('Новый пароль',`${esc(info.name)} · ${esc(info.email)}. Придумайте новый пароль.`,`<form id="fg-form"><input type="hidden" id="ob-email" value="${esc(info.email)}">
+ onboardShell(info.welcome?`Добро пожаловать в ${esc(info.company)}`:'Новый пароль',info.welcome?`${esc(info.name)}, для вас создана учётная запись. Ваш логин — ${esc(info.email)}. Придумайте пароль — и сразу начнёте работу.`:`${esc(info.name)} · ${esc(info.email)}. Придумайте новый пароль.`,`<form id="fg-form"><input type="hidden" id="ob-email" value="${esc(info.email)}">
   <label for="ob-pass">Новый пароль</label><div class="pass-wrap"><input class="field" type="password" id="ob-pass" required autocomplete="new-password"><button type="button" class="pass-eye" id="ob-eye" aria-label="Показать пароль">👁</button></div><ul class="pw-checks" id="ob-checks"></ul>
   <button class="btn btn-primary w100 login-submit" id="fg-go">Сохранить и войти</button></form>`);
  wirePerson();

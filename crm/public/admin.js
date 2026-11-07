@@ -13,14 +13,14 @@ function sheet(title,body,buttons=[],{wide=false}={}){
 }
 async function adminPage(p){
  const info=await api('/api/admin');
- const tabs=[...(info.canUsers?[['users','Сотрудники'],['departments','Отделы'],['roles','Роли и права'],['sessions','Сеансы']]:[]),...(info.canUsers||info.canSettings?[['emails','Почта и согласия']]:[]),...(info.canSettings?[['settings','Настройки CRM'],['server','Сервер'],['license','Подписка']]:[]),...(me?.perms?.admin?[['transfer','Перенос данных']]:[])];
+ const tabs=[...(info.canUsers?[['users','Сотрудники'],['departments','Отделы'],['roles','Роли и права'],['sessions','Сеансы']]:[]),...(info.canUsers||info.canSettings?[['emails','Почта и согласия']]:[]),...(info.canSettings?[['company','Компания'],['settings','Настройки CRM'],['server','Сервер'],['license','Подписка']]:[]),...(me?.perms?.admin?[['transfer','Перенос данных']]:[])];
  if(!tabs.some(t=>t[0]===adminTab))adminTab=tabs[0][0];
  p.innerHTML=`<div class="page-head"><div><h1>Администрирование</h1><p>Сотрудники ${info.active} из ${info.users} активны · отделов: ${info.departments} · ролей: ${info.roles} · открытых сеансов: ${info.sessions}</p></div><div class="actions">${info.canUsers?'<button class="btn btn-primary" id="adm-invite">Пригласить по ссылке</button><button class="btn btn-light" id="adm-new-user">Добавить вручную</button>':''}</div></div>
  <div class="tabs-row"><div class="segmented">${tabs.map(([v,t])=>`<button data-admin-tab="${v}" class="${adminTab===v?'active':''}">${t}</button>`).join('')}</div></div><div id="admin-body"><div class="muted">Загрузка…</div></div>`;
  p.querySelectorAll('[data-admin-tab]').forEach(b=>b.onclick=()=>{adminTab=b.dataset.adminTab;renderPage()});
  p.querySelector('#adm-new-user')?.addEventListener('click',()=>userForm());p.querySelector('#adm-invite')?.addEventListener('click',()=>inviteDialog().catch(err=>toast(err.message,true)));
  const body=p.querySelector('#admin-body');
- if(adminTab==='users')await adminUsers(body,info);else if(adminTab==='departments')await adminDepartments(body);else if(adminTab==='roles')await adminRoles(body,info);else if(adminTab==='sessions')await adminSessions(body);else if(adminTab==='server')await adminServer(body);else if(adminTab==='transfer')await adminTransfer(body);else if(adminTab==='license')await adminLicense(body);else if(adminTab==='emails')await adminEmails(body);else await adminSettings(body);
+ if(adminTab==='users')await adminUsers(body,info);else if(adminTab==='departments')await adminDepartments(body);else if(adminTab==='roles')await adminRoles(body,info);else if(adminTab==='sessions')await adminSessions(body);else if(adminTab==='server')await adminServer(body);else if(adminTab==='transfer')await adminTransfer(body);else if(adminTab==='company')await adminCompany(body);else if(adminTab==='license')await adminLicense(body);else if(adminTab==='emails')await adminEmails(body);else await adminSettings(body);
 }
 async function adminRefs(){const [roles,deps]=await Promise.all([api('/api/admin/roles'),api('/api/admin/departments')]);return {roles:roles.roles,schema:roles.schema,deps}}
 async function adminUsers(box){

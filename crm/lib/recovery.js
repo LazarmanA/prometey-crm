@@ -47,21 +47,21 @@ function createRecovery(){
   return {ok:true,message:'Запрос отправлен руководителю. Он пришлёт вам ссылку для нового пароля — в мессенджер или как вы договоритесь.'};
  }
  // руководитель: ссылка для нового пароля
- function adminLink(d,admin,userId,ctx={}){
+ function adminLink(d,admin,userId,ctx={},opts={}){
   const perm=Access.perms(d,admin);if(!Access.at(perm,'users','yes'))fail('Ссылку для нового пароля создаёт администратор',403);
   const u=d.users.find(x=>x.id===userId);if(!u)fail('Сотрудник не найден',404);
   const role=Access.roles(d).find(r=>r.id===u.role);if(role?.admin&&!perm.admin)fail('Ссылку для администратора создаёт администратор',403);
   if(u.disabled)fail('Сотрудник отключён — сначала включите его');
   const token=crypto.randomBytes(18).toString('base64url');
   d.passwordResets=(d.passwordResets||[]).filter(r=>r.userId!==u.id&&Date.parse(r.expiresAt)>Date.now()).slice(-500);
-  d.passwordResets.push({id:'rs_'+crypto.randomUUID(),tokenHash:hash(token),userId:u.id,createdBy:admin.id,createdAt:now(),expiresAt:new Date(Date.now()+24*HOUR).toISOString()});
+  d.passwordResets.push({id:'rs_'+crypto.randomUUID(),tokenHash:hash(token),userId:u.id,createdBy:admin.id,createdAt:now(),expiresAt:new Date(Date.now()+(opts.hours||24)*HOUR).toISOString()});
   d.passwordRequests=(d.passwordRequests||[]).filter(r=>r.userId!==u.id);
-  audit(d,admin.id,'password.reset_link',u.id,'Ссылка для нового пароля: '+u.name);
+  if(!opts.quiet)audit(d,admin.id,'password.reset_link',u.id,'Ссылка для нового пароля: '+u.name);
   const base=String(ctx.base||'').replace(/\/+$/,'');
   return {url:base?`${base}/#reset=${token}`:'',link:`#reset=${token}`,name:u.name,email:u.email,expiresAt:d.passwordResets.at(-1).expiresAt,networkOff:!!ctx.networkOff};
  }
  function findReset(d,token){const h=hash(token);const r=(d.passwordResets||[]).find(x=>sameHash(x.tokenHash,h));if(!r||r.usedAt||Date.parse(r.expiresAt)<=Date.now())fail('Ссылка для нового пароля недействительна: её уже использовали или прошло 24 часа. Попросите руководителя прислать новую',410,'reset_invalid');const u=d.users.find(x=>x.id===r.userId&&!x.disabled);if(!u)fail('Сотрудник не найден или отключён',410,'reset_invalid');return {r,u}}
- function resetInfo(d,token){const {u}=findReset(d,token);return {name:u.name,email:u.email,company:d.settings?.companyName||'ПРОМЕТЕЙ'}}
+ function resetInfo(d,token){const {u}=findReset(d,token);return {name:u.name,email:u.email,company:d.settings?.companyName||'ПРОМЕТЕЙ',welcome:u.source==='import'&&!u.lastLoginAt}}
  function resetByLink(d,token,b){const {r,u}=findReset(d,token);setPassword(d,u,String(b.password??''));r.usedAt=now();const code=issueCode(u);audit(d,u.id,'password.reset',u.id,'Новый пароль задан по ссылке');return {user:u,recoveryCode:code}}
  // «Профиль → Новый код восстановления» (нужен текущий пароль)
  function profileCode(d,user,b){const u=d.users.find(x=>x.id===user.id);if(!u)fail('Пользователь не найден',404);if(!Security.verifyPassword(String(u.passwordHash||u.password||''),String(b.current??'')))fail('Текущий пароль неверный',400);const code=issueCode(u);audit(d,u.id,'password.recovery_code',u.id,'Выдан новый код восстановления');return {recoveryCode:code,at:u.recoveryCodeAt}}

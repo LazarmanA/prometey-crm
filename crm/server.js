@@ -32,6 +32,7 @@ const MAX_SESSIONS_PER_USER=20;
 const Avito=require('./lib/avito').createAvito({dataDir:path.dirname(DB_FILE),store});
 const LicenseLib=require('./lib/license');
 const License=LicenseLib.createLicense({dataDir:path.dirname(DB_FILE),store,version:VERSION,collect:LicenseLib.collector({store,dbFile:DB_FILE,pdfEngine,backupsDir:()=>process.env.BACKUP_DIR||path.join(path.dirname(DB_FILE),'backups'),logFile:process.env.PROMETEY_LAUNCHER_LOG||'',extra:d=>Privacy.forVendor(d)})});
+const Company=require('./lib/company').createCompany({license:License,files:Files,recovery:Recovery});
 const Privacy=require('./lib/privacy').createPrivacy({store,license:License});
 const limits={
  loginPair:Security.createLimiter({limit:8,windowMs:15*60000}),     // one address + one account
@@ -130,10 +131,10 @@ async function api(req,res,url){
  if(avitoHook){if(req.method!=='POST')return json(res,405,{error:'Требуется POST'});return json(res,200,Avito.webhook(avitoHook[1],await readBody(req,64*1024)))}
  const webhook=url.pathname.match(/^\/api\/telephony\/webhooks\/([a-z][a-z0-9_-]{0,39})$/);
  if(webhook){telephony.authorize(req,webhook[1]);if(req.method!=='POST')return json(res,405,{error:'Требуется POST'});return json(res,200,telephony.ingest(webhook[1],await readBody(req)))}
- if(url.pathname==='/api/config'&&req.method==='GET')return json(res,200,{yandexMapsApiKey:process.env.YANDEX_MAPS_API_KEY||config.yandexMapsApiKey||'',version:VERSION,installer:process.env.PROMETEY_ADMIN_MUST_CHANGE==='1',setup:Onboarding.setupNeeded(store.read())});
+ if(url.pathname==='/api/config'&&req.method==='GET')return json(res,200,{yandexMapsApiKey:process.env.YANDEX_MAPS_API_KEY||config.yandexMapsApiKey||'',version:VERSION,installer:process.env.PROMETEY_ADMIN_MUST_CHANGE==='1',setup:Onboarding.setupNeeded(store.read()),brand:Company.brand(store.read())});
  const recordingRoute=url.pathname.match(/^\/api\/calls\/(clients|orders)\/([^/]+)\/([^/]+)\/recording$/);
  const transferImport=url.pathname==='/api/admin/transfer/import';
- const needsBody=!recordingRoute&&!transferImport&&['POST','PATCH','PUT'].includes(req.method);const bigBody=url.pathname==='/api/feed/files'||url.pathname==='/api/templates'||url.pathname.startsWith('/api/templates/')||url.pathname==='/api/files/logo';
+ const needsBody=!recordingRoute&&!transferImport&&['POST','PATCH','PUT'].includes(req.method);const bigBody=url.pathname.startsWith('/api/import/')||url.pathname==='/api/setup'||url.pathname==='/api/feed/files'||url.pathname==='/api/templates'||url.pathname.startsWith('/api/templates/')||url.pathname==='/api/files/logo';
  const body=needsBody?await readBody(req,url.pathname==='/api/feed/files'?28*1024*1024:bigBody?16*1024*1024:undefined):{};
  if(url.pathname==='/api/privacy/policy'&&req.method==='GET')return json(res,200,Privacy.publicPolicy());
  if(url.pathname==='/api/login'&&req.method==='POST'){
@@ -143,8 +144,11 @@ async function api(req,res,url){
   if(!valid){loginFailed(req,body.email);return json(res,401,{error:'Неверный логин или пароль'})}
   loginSucceeded(req,body.email);return startSession(req,res,user,data,body.password)
  }
+ if(url.pathname==='/api/brand/logo'&&req.method==='GET'){const e=(store.read().legalEntities||[])[0];const f=e?.logo?Files.logoFile(e.logo):null;if(!f)throw Object.assign(new Error('Логотип не загружен'),{status:404});return sendFile(res,f,e.logo.mime,'logo',{inline:true,cache:'public, max-age=86400'})}
+ // мастер регистрации: поиск реквизитов до входа — только пока CRM ждёт первую регистрацию и только с этого компьютера или по ссылке установщика
+ if(url.pathname==='/api/setup/lookup'&&req.method==='POST'){const d=store.read();if(!Onboarding.setupNeeded(d))throw Object.assign(new Error('Регистрация уже завершена'),{status:409});if(!isLoopback(req)&&!Onboarding.setupTokenOk?.(body.token))throw Object.assign(new Error('Поиск доступен на компьютере, где установлена CRM'),{status:403});return json(res,200,body.kind==='bik'?await Company.lookupBik(d,body.query):await Company.lookupInn(d,body.query))}
  if(url.pathname==='/api/setup'&&req.method==='GET')return json(res,200,Onboarding.setupInfo(store.read()));
- if(url.pathname==='/api/setup'&&req.method==='POST'){const r=store.transaction(d=>{const owner=Onboarding.setup(d,body,{local:isLoopback(req)});return {changed:true,body:{owner,code:Recovery.issueCode(owner)}}}).body;return startSession(req,res,r.owner,store.read(),undefined,{recoveryCode:r.code})}
+ if(url.pathname==='/api/setup'&&req.method==='POST'){const r=store.transaction(d=>{const owner=Onboarding.setup(d,body,{local:isLoopback(req)});if(body.organization)Company.applyOrganization(d,{...owner,perms:Access.perms(d,owner)},body.organization,{saveLegalEntity:Documents.saveLegalEntity});return {changed:true,body:{owner,code:Recovery.issueCode(owner)}}}).body;return startSession(req,res,r.owner,store.read(),undefined,{recoveryCode:r.code})}
  const invite=url.pathname.match(/^\/api\/invite\/([A-Za-z0-9_-]{16,64})$/);
  if(invite&&req.method==='GET')return json(res,200,Onboarding.inviteInfo(store.read(),invite[1]));
  if(invite&&req.method==='POST'){const r=store.transaction(d=>{const nu=Onboarding.accept(d,invite[1],body,{canAddUser:n=>License.canAddUser(n)});return {changed:true,body:{nu,code:Recovery.issueCode(nu)}}}).body;return startSession(req,res,r.nu,store.read(),undefined,{recoveryCode:r.code})}
@@ -171,6 +175,13 @@ async function api(req,res,url){
  if(url.pathname==='/api/admin/transfer/export'&&req.method==='GET'){const r=Transfer.exportArchive(user);return sendBuffer(res,r.zip,'application/zip',r.name)}
  if(transferImport&&req.method==='POST'){if(!Access.perms(store.read(),user).admin)throw Object.assign(new Error('Загружать данные может администратор'),{status:403});return json(res,200,await Transfer.importArchive(user,await readRaw(req,Transfer.MAX_ARCHIVE)))}
  if(url.pathname==='/api/archive/messages'&&req.method==='GET'){const d=store.read();const r=Transfer.personalArchive(user,{orders:CRM.scopes?CRM.scopes.sharedOrderScope(d,user):[]});return sendBuffer(res,Buffer.from(r.html),'text/html; charset=utf-8',r.name)}
+ if(url.pathname==='/api/company'&&req.method==='GET')return json(res,200,Company.info(store.read()));
+ if(url.pathname==='/api/company/brand'&&req.method==='PATCH')return json(res,200,store.transaction(d=>({changed:true,body:Company.saveBrand(d,user,body)})).body);
+ if(url.pathname==='/api/company/lookup'&&req.method==='POST'){const d=store.read();return json(res,200,body.kind==='bik'?await Company.lookupBik(d,body.query):await Company.lookupInn(d,body.query))}
+ const tpl=url.pathname.match(/^\/api\/import\/template\/(clients|equipment|employees)$/);
+ if(tpl&&req.method==='GET'){const t=Company.template(tpl[1]);return sendBuffer(res,t.buf,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',t.name)}
+ const imp=url.pathname.match(/^\/api\/import\/(clients|equipment|employees)$/);
+ if(imp&&req.method==='POST'){const ctx={...publicBase(req),canAddUser:n=>License.canAddUser(n)};if(body.dryRun){const d=structuredClone(store.read());return json(res,200,Company.importTable(d,user,imp[1],body,ctx))}const r=store.transaction(d=>{const rep=Company.importTable(d,user,imp[1],body,ctx);return {changed:rep.created>0,body:rep}}).body;if(r.links.length)r.linksFile=Company.linksTable(r).toString('base64');return json(res,200,r)}
  const resetLink=url.pathname.match(/^\/api\/admin\/users\/([^/]+)\/reset-link$/);
  if(resetLink&&req.method==='POST')return json(res,201,store.transaction(d=>({changed:true,body:Recovery.adminLink(d,user,decodeURIComponent(resetLink[1]),publicBase(req))})).body);
  if(url.pathname==='/api/admin/password-requests'&&req.method==='GET')return json(res,200,Recovery.requests(store.read(),user));

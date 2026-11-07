@@ -123,6 +123,6 @@ function createOnboarding({env=process.env}={}){
   return nx;
  }
 
- return {setupMode,setupNeeded,prepare,setupInfo,setup,admin,inviteInfo,accept};
+ return {setupMode,setupNeeded,setupTokenOk,prepare,setupInfo,setup,admin,inviteInfo,accept};
 }
 module.exports={createOnboarding,DEMO_TABLES};

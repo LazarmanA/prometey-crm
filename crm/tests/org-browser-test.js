@@ -1,0 +1,72 @@
+'use strict';
+// UI 1.7.0: мастер «Регистрация организации» → фирменный стиль → «Администрирование → Компания» → загрузка из Excel.
+const {spawn}=require('node:child_process');const http=require('node:http');const {chromium}=require('playwright');
+const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),assert=require('node:assert/strict');
+const Sheet=require('../lib/sheet');
+const root=path.join(__dirname,'..'),temp=fs.mkdtempSync(path.join(os.tmpdir(),'prometey-org-ui-'));
+const SHOTS=process.env.SHOTS||'';let checks=0;const ok=(c,l)=>{assert.ok(c,l);checks++;console.log('PASS',l)};
+const port=45000+Math.floor(Math.random()*15000),BASE=`http://127.0.0.1:${port}`,KEY='0123456789abcdef0123456789abcdef01234567';
+const dadata=http.createServer((req,res)=>{let b='';req.on('data',c=>b+=c);req.on('end',()=>{res.setHeader('content-type','application/json');const q=JSON.parse(b).query;
+ if(req.url.endsWith('/party'))return res.end(JSON.stringify({suggestions:[{value:'ООО "КРАН-СЕРВИС"',data:{inn:q,kpp:'773601001',ogrn:'1027700132195',name:{full_with_opf:'ОБЩЕСТВО С ОГРАНИЧЕННОЙ ОТВЕТСТВЕННОСТЬЮ "КРАН-СЕРВИС"',short_with_opf:'ООО "КРАН-СЕРВИС"'},management:{name:'Иванов Иван Иванович',post:'Генеральный директор'},address:{unrestricted_value:'117312, г Москва, ул Вавилова, д 19'},state:{status:'ACTIVE'}}}]}));
+ res.end(JSON.stringify({suggestions:[{value:'ПАО СБЕРБАНК',data:{bic:q,correspondent_account:'30101810400000000225',name:{payment:'ПАО СБЕРБАНК'}}}]}))})});
+(async()=>{let srv,browser;try{
+ await new Promise(r=>dadata.listen(0,'127.0.0.1',r));
+ srv=spawn(process.execPath,['--disable-warning=ExperimentalWarning','server.js'],{cwd:root,env:{...process.env,NODE_ENV:'production',HOST:'127.0.0.1',PORT:String(port),PROMETEY_SETUP:'1',PROMETEY_SETUP_TOKEN:'org-ui-token-123456',PROMETEY_DADATA_KEY:KEY,PROMETEY_DADATA_URL:`http://127.0.0.1:${dadata.address().port}`,DB_FILE:path.join(temp,'db.sqlite'),UPLOADS_DIR:path.join(temp,'up'),DOCUMENTS_DIR:path.join(temp,'docs'),COOKIE_SECURE:'false'},stdio:['ignore','pipe','pipe']});
+ await new Promise((res,rej)=>{let o='';srv.stdout.on('data',d=>{o+=d;if(o.includes('ПРОМЕТЕЙ'))res()});srv.stderr.on('data',d=>o+=d);setTimeout(()=>rej(new Error(o)),15000)});
+ browser=await chromium.launch({args:['--no-sandbox']});const errors=[];
+ const ctx=await browser.newContext({viewport:{width:1366,height:900},reducedMotion:'reduce'});const page=await ctx.newPage();page.on('pageerror',e=>errors.push(e.message));
+ await page.addInitScript(()=>{try{localStorage.setItem('prometey_intro_seen','1')}catch{}});
+ // логотип
+ const lp=await browser.newPage({viewport:{width:200,height:200}});await lp.setContent('<div style="width:200px;height:200px;background:#1570ef;border-radius:40px;display:grid;place-items:center;color:#fff;font:900 90px sans-serif">К</div>');const logo=await lp.screenshot();await lp.close();
+ await page.goto(BASE+'/#setup=org-ui-token-123456');await page.getByText('Регистрация организации').waitFor();
+ ok(await page.getByText('Шаг 1 из 4').isVisible(),'wizard opens instead of a bare sign-up form');
+ await page.locator('#wz-inn').fill('7707083893');await page.locator('#wz-find-inn').click();await page.locator('#wz-inn-note.ok').waitFor();
+ ok((await page.locator('#wz-name').inputValue()).includes('КРАН-СЕРВИС')&&await page.locator('#wz-kpp').inputValue()==='773601001'&&(await page.locator('#wz-sign').inputValue())==='Иванов Иван Иванович','step 1: INN → name, KPP, OGRN, address, director filled');
+ if(SHOTS)await page.screenshot({path:path.join(SHOTS,'o1-company.png')});
+ await page.locator('#wz-next').click();await page.getByText('Шаг 2 из 4').waitFor();
+ await page.locator('#wz-bik').fill('044525225');await page.locator('#wz-find-bik').click();await page.locator('#wz-bik-note.ok').waitFor();
+ ok(await page.locator('#wz-bank').inputValue()==='ПАО СБЕРБАНК','step 2: BIK → bank filled');
+ await page.locator('#wz-acc').fill('4070281093800000000');await page.locator('#wz-next').click();await page.getByText('Расчётный счёт — 20 цифр').waitFor();ok(true,'bank account checked (20 digits)');
+ await page.locator('#wz-acc').fill('40702810938000000001');await page.locator('#wz-next').click();await page.getByText('Шаг 3 из 4').waitFor();
+ ok((await page.locator('#wz-app').inputValue())==='КРАН-СЕРВИС CRM','step 3: CRM name suggested from the company name');
+ await page.locator('#wz-app').fill('Кран-Сервис CRM');await page.locator('[data-color="#1570ef"]').click();
+ const ch=page.waitForEvent('filechooser');await page.locator('#wz-logo-pick').click();await (await ch).setFiles({name:'logo.png',mimeType:'image/png',buffer:logo});
+ await page.locator('.wz-preview-icon img').waitFor();ok(true,'logo preview shown');
+ if(SHOTS)await page.screenshot({path:path.join(SHOTS,'o3-brand.png')});
+ await page.locator('#wz-next').click();await page.getByText('Шаг 4 из 4').waitFor();
+ await page.locator('#wz-back').click();await page.getByText('Шаг 3 из 4').waitFor();ok(await page.locator('.wz-preview-icon img').count()===1&&(await page.locator('#wz-app').inputValue())==='Кран-Сервис CRM','«Назад» keeps what was entered');
+ await page.locator('#wz-next').click();
+ await page.locator('#ob-name').fill('Иван Иванов');await page.locator('#ob-email').fill('boss@kran.ru');await page.locator('#ob-pass').fill('Kran-Boss-2026!');
+ if(SHOTS)await page.screenshot({path:path.join(SHOTS,'o4-owner.png')});
+ await page.locator('#wz-next').click();
+ await page.locator('#consent-agree').waitFor();await page.locator('#consent-agree').check();await page.locator('#consent-ok').click();
+ await page.getByText('Ваш код восстановления').waitFor();await page.locator('.modal-foot').getByRole('button',{name:'Я сохранил код'}).click();
+ await page.getByText('Организация создана. Осталось загрузить данные').waitFor();ok(true,'after registration: «Администрирование → Компания» with next steps');
+ const accent=await page.evaluate(()=>getComputedStyle(document.documentElement).getPropertyValue('--accent').trim());ok(accent==='#1570ef','interface uses the company colour');
+ ok((await page.locator('.sidebar .brand-mark, .brand-mark').first().innerText()).includes('Кран-Сервис CRM')&&await page.locator('.brand-icon-logo img').count()>0,'menu shows company name and logo instead of ПРОМЕТЕЙ');
+ if(SHOTS)await page.screenshot({path:path.join(SHOTS,'o5-company-tab.png'),fullPage:true});
+ // импорт клиентов
+ const x=Sheet.writeXlsx([['Название компании','ИНН','Телефон'],['ООО Стройка','7701234567','+7 900'],['ООО Мост','123','']]);
+ const fc=page.waitForEvent('filechooser');await page.locator('[data-import="clients"]').click();await (await fc).setFiles({name:'клиенты.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:x});
+ await page.getByText('Будет добавлено: 1').waitFor();ok(await page.getByText('Строка 3').isVisible(),'import preview: 1 to add, row 3 with an error');
+ if(SHOTS)await page.screenshot({path:path.join(SHOTS,'o6-import.png')});
+ await page.locator('.modal-foot').getByRole('button',{name:/Загрузить 1/}).click();await page.getByText('Добавлено: 1').waitFor();ok(true,'clients imported');
+ await page.locator('.modal-foot').getByRole('button',{name:'Готово'}).click();
+ // сотрудники из Excel → ссылки
+ const st=Sheet.writeXlsx([['Имя и фамилия','E-mail','Роль'],['Мария Счётова','buh@kran.ru','Бухгалтер']]);
+ const fc2=page.waitForEvent('filechooser');await page.locator('[data-import="employees"]').click();await (await fc2).setFiles({name:'staff.xlsx',mimeType:'application/octet-stream',buffer:st});
+ await page.locator('.modal-foot').getByRole('button',{name:/Загрузить 1/}).click();await page.getByText('Ссылки для входа сотрудников').waitFor();
+ const dl=page.waitForEvent('download');await page.locator('.modal-foot').getByRole('button',{name:'Скачать таблицу со ссылками'}).click();ok(/\.xlsx$/.test((await dl).suggestedFilename()),'employees imported, links table downloaded');
+ const empLink=(await page.locator('.imp-links .invite-link').first().innerText()).trim();
+ // вход сотрудника по ссылке и вид страницы входа
+ const c2=await browser.newContext({viewport:{width:390,height:844},isMobile:true,reducedMotion:'reduce'});const p2=await c2.newPage();p2.on('pageerror',e=>errors.push(e.message));
+ await p2.goto(empLink.replace(/^https?:\/\/[^/]+/,BASE));await p2.getByText('Добро пожаловать в').waitFor();
+ ok((await p2.locator('.login-card').innerText()).includes('buh@kran.ru')&&(await p2.locator('.brand-mark').first().innerText()).includes('Кран-Сервис CRM'),'employee link: welcome page in company branding, login shown');
+ ok(await p2.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'fits a phone');
+ if(SHOTS)await p2.screenshot({path:path.join(SHOTS,'o7-employee.png')});
+ const p3=await (await browser.newContext({viewport:{width:1366,height:900}})).newPage();await p3.goto(BASE+'/');await p3.locator('#login-email').waitFor();
+ ok((await p3.locator('.login-card .brand-mark').innerText()).includes('Кран-Сервис CRM')&&(await p3.title())==='Кран-Сервис CRM','login page in company branding');
+ if(SHOTS)await p3.screenshot({path:path.join(SHOTS,'o8-login.png')});
+ assert.deepEqual(errors,[]);ok(true,'no browser errors');
+ console.log(`OK org UI: ${checks} checks`);
+}catch(e){console.error(e);process.exitCode=1}finally{try{await browser?.close()}catch{};try{srv?.kill()}catch{};dadata.close();fs.rmSync(temp,{recursive:true,force:true})}})();

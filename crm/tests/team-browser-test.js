@@ -20,21 +20,22 @@ const PNG=Buffer.from('89504e470d0a1a0a0000000d494844520000004000000030080200000
  const page=await ctx.newPage();page.on('pageerror',e=>errors.push(e.message));
  await page.addInitScript(()=>{try{localStorage.setItem('prometey_intro_seen','1')}catch{}});
  // 1. установщик открывает CRM на странице регистрации
- await page.goto(BASE+'/#setup=ui-token-1234567890');await page.locator('#ob-form').waitFor();
- ok(await page.getByText('Добро пожаловать!').isVisible()&&!(await page.locator('#login-email').count()),'first start shows registration, not a login with unknown password');
+ await page.goto(BASE+'/#setup=ui-token-1234567890');await page.getByText('Регистрация организации').waitFor();
+ ok(!(await page.locator('#login-email').count()),'first start shows registration, not a login with unknown password');
  if(SHOTS)await page.screenshot({path:path.join(SHOTS,'1-setup.png')});
- await page.locator('#ob-company').fill('ООО Кран-Сервис');await page.locator('#ob-name').fill('Андрей Лазарь');await page.locator('#ob-email').fill('boss@kran.ru');
+ await page.locator('#wz-name').fill('ООО Кран-Сервис');await page.locator('#wz-next').click();await page.getByText('Шаг 2 из 4').waitFor();await page.locator('#wz-next').click();await page.getByText('Шаг 3 из 4').waitFor();await page.locator('#wz-next').click();await page.getByText('Шаг 4 из 4').waitFor();
+ await page.locator('#ob-name').fill('Андрей Лазарь');await page.locator('#ob-email').fill('boss@kran.ru');
  await page.locator('#ob-pass').fill('слабый');ok(await page.locator('#ob-checks .bad').isVisible(),'warns about Russian keyboard layout in the password');
  await page.locator('#ob-pass').fill('Kran-Boss-2026!');ok(await page.locator('#ob-checks li.ok').count()===3,'password checklist turns green');
- await page.locator('#ob-go').click();
+ await page.locator('#wz-next').click();
  // согласие с политикой ПДн
  await page.locator('#consent-agree').waitFor();await page.locator('#consent-agree').check();await page.locator('#consent-ok').click();
  await page.getByText('Ваш код восстановления').waitFor();const ownerCode=(await page.locator('#rc-code').innerText()).trim();ok(/^[A-Z2-9]{4}(-[A-Z2-9]{4}){3}$/.test(ownerCode),'owner sees a recovery code right after registration');
  if(SHOTS)await page.screenshot({path:path.join(SHOTS,'2a-code.png')});
  await page.locator('.modal-foot').getByRole('button',{name:'Я сохранил код'}).click();
- await page.getByText('Готово! Пригласите команду').waitFor();ok(true,'after registration CRM offers to invite the team');
+ await page.getByText('Организация создана').waitFor();ok(await page.getByRole('button',{name:'Пригласить по ссылке'}).isVisible(),'after registration CRM offers to invite the team');
  if(SHOTS)await page.screenshot({path:path.join(SHOTS,'2-welcome.png')});
- await page.locator('.modal-foot').getByRole('button',{name:'Пригласить сотрудника'}).click();
+ await page.getByRole('button',{name:'Пригласить по ссылке'}).click();
  await page.locator('#inv-role').waitFor();ok(await page.locator('.modal').getByText('только на этом компьютере').isVisible(),'invite dialog warns when the office network is closed');
  await page.locator('#inv-pos').fill('Диспетчер');await page.locator('.modal .save').click();
  await page.locator('#inv-link').waitFor();const link=(await page.locator('#inv-link').innerText()).trim();ok(/#invite=[A-Za-z0-9_-]{20,}$/.test(link),'invite link shown: '+link.replace(/=.*/,'=…'));

@@ -19,6 +19,7 @@ const backend=[
  ['Команда: регистрация, приглашения, файлы в ленте','tests/team-test.js'],
  ['Перенос данных и архив ленты','tests/transfer-test.js'],
  ['Восстановление пароля','tests/recovery-test.js'],
+ ['Организация: реквизиты, стиль, импорт Excel','tests/company-test.js'],
  ['Производительность API','tests/performance-test.js']
 ];
 const browser=[
@@ -35,7 +36,8 @@ const browser=[
  ['UI: лента, администрирование, бухгалтерия','tests/office-browser-test.js'],
  ['UI: перетаскивание файлов','tests/files-browser-test.js'],
  ['UI: вход, согласие, почта, Авито','tests/onboarding-browser-test.js'],
- ['UI: регистрация, приглашение, файлы в ленте','tests/team-browser-test.js']
+ ['UI: регистрация, приглашение, файлы в ленте','tests/team-browser-test.js'],
+ ['UI: регистрация организации и импорт','tests/org-browser-test.js']
 ];
 const suites=noBrowser?backend:[...backend,...browser];
 const results=[];
