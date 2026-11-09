@@ -21,6 +21,7 @@ const backend=[
  ['Восстановление пароля','tests/recovery-test.js'],
  ['Организация: реквизиты, стиль, импорт Excel','tests/company-test.js'],
  ['Подпись и печать в документах','tests/facsimile-test.js'],
+ ['Выставить счёт одним действием','tests/quick-invoice-test.js'],
  ['Производительность API','tests/performance-test.js']
 ];
 const browser=[
@@ -39,7 +40,8 @@ const browser=[
  ['UI: вход, согласие, почта, Авито','tests/onboarding-browser-test.js'],
  ['UI: регистрация, приглашение, файлы в ленте','tests/team-browser-test.js'],
  ['UI: регистрация организации и импорт','tests/org-browser-test.js'],
- ['UI: подпись и печать, документы из карточки компании','tests/facsimile-browser-test.js']
+ ['UI: подпись и печать, документы из карточки компании','tests/facsimile-browser-test.js'],
+ ['UI: Сделки → Выставить счёт','tests/quick-invoice-browser-test.js']
 ];
 const suites=noBrowser?backend:[...backend,...browser];
 const results=[];

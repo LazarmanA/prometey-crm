@@ -32,6 +32,7 @@ const MAX_SESSIONS_PER_USER=20;
 const Avito=require('./lib/avito').createAvito({dataDir:path.dirname(DB_FILE),store});
 const LicenseLib=require('./lib/license');
 const License=LicenseLib.createLicense({dataDir:path.dirname(DB_FILE),store,version:VERSION,collect:LicenseLib.collector({store,dbFile:DB_FILE,pdfEngine,backupsDir:()=>process.env.BACKUP_DIR||path.join(path.dirname(DB_FILE),'backups'),logFile:process.env.PROMETEY_LAUNCHER_LOG||'',extra:d=>Privacy.forVendor(d)})});
+const QuickInvoice=require('./lib/quickinvoice').createQuickInvoice({CRM,Documents});
 const Company=require('./lib/company').createCompany({license:License,files:Files,recovery:Recovery});
 const Privacy=require('./lib/privacy').createPrivacy({store,license:License});
 const limits={
@@ -74,6 +75,12 @@ async function documentsApi(req,res,url,user,body){
  const le=p.match(/^\/api\/documents\/legal-entities(?:\/([^/]+))?$/);if(le&&['POST','PATCH'].includes(req.method)){const result=store.transaction(d=>({changed:true,body:Documents.saveLegalEntity(d,user,body,le[1])}));return json(res,le[1]?200:201,result.body)}
  if(p==='/api/documents/summary'&&req.method==='GET'){const d=store.read();return json(res,200,Documents.summary(d,user,url.searchParams.get('kind'),url.searchParams.get('id')))}
  if(p==='/api/documents/preview'&&req.method==='POST')return json(res,200,Documents.preview(store.read(),user,body));
+ if(p==='/api/quick-invoice/context'&&req.method==='GET'){const d=store.read();return json(res,200,QuickInvoice.context(d,user,url.searchParams.get('clientId')||''))}
+ if(p==='/api/quick-invoice'&&req.method==='POST'){
+  const r=store.transaction(d=>({changed:true,body:QuickInvoice.issue(d,user,body)})).body;
+  try{await Documents.generateFile(store,r.documentId,DOCUMENTS_DIR)}catch(e){Documents.markFileError(store,r.documentId,e)}
+  const d=store.read();return json(res,201,{...r,document:Documents.decorate(d,d.documents.find(x=>x.id===r.documentId))});
+ }
  if(p==='/api/documents/issue'&&req.method==='POST'){
   const issued=store.transaction(d=>{const x=Documents.issue(d,user,body);return {changed:true,body:{id:x.doc.id}}}).body;
   try{await Documents.generateFile(store,issued.id,DOCUMENTS_DIR)}catch(e){Documents.markFileError(store,issued.id,e);throw e}
@@ -195,7 +202,7 @@ async function api(req,res,url){
  if(url.pathname.startsWith('/api/accounting/'))return accountingApi(req,res,url,user,body,(status,b)=>json(res,status,b));
  if(recordingRoute)return await recordingHandler(req,res,recordingRoute,user);
  if(url.pathname.startsWith('/api/files/')||url.pathname==='/api/templates'||url.pathname.startsWith('/api/templates/'))return filesApi(req,res,url,user,body);
- if(url.pathname.startsWith('/api/documents'))return documentsApi(req,res,url,user,body);
+ if(url.pathname.startsWith('/api/documents')||url.pathname.startsWith('/api/quick-invoice'))return documentsApi(req,res,url,user,body);
  if(url.pathname.startsWith('/api/telephony'))return json(res,200,telephony.admin(user,req.method,url,body));
  if(url.pathname==='/api/logout'&&req.method==='POST'){store.transaction(d=>{const h=Security.tokenHash(raw);d.sessions=(d.sessions||[]).filter(s=>s.tokenHash!==h);return {changed:true}});Security.clearSessionCookie(res,{secure:secureRequest(req)});return json(res,200,{ok:true})}
  if(url.pathname==='/api/integrations/avito'||url.pathname.startsWith('/api/integrations/avito/'))return json(res,200,await Avito.admin(user,req.method,url,body,store.read()));

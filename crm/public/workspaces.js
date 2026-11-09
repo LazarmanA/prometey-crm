@@ -14,7 +14,8 @@ async function clients(p){
 }
 async function orders(p){
  if(workspaceSelection?.kind==='orders')return showWorkspace(p,'orders',workspaceSelection.id);
- await legacyOrders(p);const list=await api(listUrl('orders'));await ownerControls(p,'orders',list);
+ if(typeof ordersView!=='undefined'&&ordersView==='invoice'&&typeof quickInvoicePage==='function')return quickInvoicePage(p);
+ await legacyOrders(p);if(typeof ordersTabs==='function'){p.querySelector('.page-head')?.insertAdjacentHTML('beforeend',ordersTabs('list'));bindOrdersTabs(p)}const list=await api(listUrl('orders'));await ownerControls(p,'orders',list);
  p.querySelectorAll('.order-toggle').forEach(b=>b.insertAdjacentHTML('afterend',`<button class="btn btn-dark btn-sm" data-workspace="${esc(b.dataset.id)}">Рабочий стол</button>`));bindDesks(p,'orders');
 }
 function bindDesks(p,kind){p.querySelectorAll('[data-workspace]').forEach(b=>b.onclick=()=>{workspaceSelection={kind,id:b.dataset.workspace};renderPage()})}
