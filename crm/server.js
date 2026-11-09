@@ -32,6 +32,7 @@ const MAX_SESSIONS_PER_USER=20;
 const Avito=require('./lib/avito').createAvito({dataDir:path.dirname(DB_FILE),store});
 const LicenseLib=require('./lib/license');
 const License=LicenseLib.createLicense({dataDir:path.dirname(DB_FILE),store,version:VERSION,collect:LicenseLib.collector({store,dbFile:DB_FILE,pdfEngine,backupsDir:()=>process.env.BACKUP_DIR||path.join(path.dirname(DB_FILE),'backups'),logFile:process.env.PROMETEY_LAUNCHER_LOG||'',extra:d=>Privacy.forVendor(d)})});
+const Journal=require('./lib/journal').createJournal({CRM});
 const QuickInvoice=require('./lib/quickinvoice').createQuickInvoice({CRM,Documents});
 const Company=require('./lib/company').createCompany({license:License,files:Files,recovery:Recovery});
 const Privacy=require('./lib/privacy').createPrivacy({store,license:License});
@@ -203,6 +204,10 @@ async function api(req,res,url){
  if(recordingRoute)return await recordingHandler(req,res,recordingRoute,user);
  if(url.pathname.startsWith('/api/files/')||url.pathname==='/api/templates'||url.pathname.startsWith('/api/templates/'))return filesApi(req,res,url,user,body);
  if(url.pathname.startsWith('/api/documents')||url.pathname.startsWith('/api/quick-invoice'))return documentsApi(req,res,url,user,body);
+ {const jm=url.pathname.match(/^\/api\/deals\/([^/]+)\/journal(?:\/(copy|[^/]+))?$/);if(jm){const id=decodeURIComponent(jm[1]),sub=jm[2]?decodeURIComponent(jm[2]):'';
+  if(req.method==='GET'&&!sub)return json(res,200,Journal.view(store.read(),user,id));
+  const r=store.transaction(d=>{let out;if(req.method==='POST'&&!sub)out=Journal.add(d,user,id,body);else if(req.method==='POST'&&sub==='copy')out=Journal.copy(d,user,id,body);else if(req.method==='PATCH'&&sub)out=Journal.update(d,user,id,sub,body);else if(req.method==='DELETE'&&sub)out=Journal.remove(d,user,id,sub);else{const e=new Error('Not found');e.status=404;throw e}return {changed:true,body:out}});
+  return json(res,req.method==='POST'?201:200,{...r.body,journal:Journal.view(store.read(),user,id)})}}
  if(url.pathname.startsWith('/api/telephony'))return json(res,200,telephony.admin(user,req.method,url,body));
  if(url.pathname==='/api/logout'&&req.method==='POST'){store.transaction(d=>{const h=Security.tokenHash(raw);d.sessions=(d.sessions||[]).filter(s=>s.tokenHash!==h);return {changed:true}});Security.clearSessionCookie(res,{secure:secureRequest(req)});return json(res,200,{ok:true})}
  if(url.pathname==='/api/integrations/avito'||url.pathname.startsWith('/api/integrations/avito/'))return json(res,200,await Avito.admin(user,req.method,url,body,store.read()));

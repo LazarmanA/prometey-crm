@@ -31,7 +31,10 @@ async function showWorkspace(p,kind,id){
  p.querySelectorAll('[data-toggle-entry]').forEach(b=>b.onclick=async()=>{b.disabled=true;try{const e=d.items.find(e=>e.id===b.dataset.toggleEntry);await api('/api/workspaces/'+kind+'/'+id+'/items/'+e.id,{method:'PATCH',body:JSON.stringify({done:!e.done})});renderPage()}catch(e){toast(e.message,true);b.disabled=false}});
  p.querySelectorAll('[data-delete-entry]').forEach(b=>b.onclick=()=>modal('Удалить запись?','<p>Запись будет удалена с рабочего стола.</p>',()=>api('/api/workspaces/'+kind+'/'+id+'/items/'+b.dataset.deleteEntry,{method:'DELETE'}),'Удалить'));
  p.querySelectorAll('[data-related]').forEach(b=>b.onclick=()=>{current='orders';workspaceSelection={kind:'orders',id:b.dataset.related};renderApp()});
- if(!isCompany){await renderOrderDetail(id,{...x,canEdit:d.canEdit});await mountDealChat(p,id)}
+ if(!isCompany){await renderOrderDetail(id,{...x,canEdit:d.canEdit});
+  // план сделки и журнал работ — наверх рабочего стола
+  await mountDealChat(p,id);
+  const main=p.querySelector('.ws-layout main'),planSec=p.querySelector('[data-detail]')?.closest('.ws-panel');if(main&&planSec){main.prepend(planSec);if(typeof mountJournal==='function'){const slot=document.createElement('div');planSec.after(slot);await mountJournal(slot,id)}}}
  await mountDocumentsPanel(p,kind,id,{deals:d.deals||[]});
  await mountCalls(p,kind,id,x);
 }
