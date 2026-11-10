@@ -47,5 +47,16 @@ async function req(p,token,method='GET',body){const r=await fetch(base+p,{method
  r=await req('/api/quick-invoice',manager,'POST',{...base1,client:{inn:'7707083893',name:'ООО Чужая'}});ok(foreignVisible?r.status===201:(r.status===409&&/другого менеджера/.test(r.body.error)),'company of another manager: not duplicated');
  // без права на CRM — нельзя
  const acc=await login('accountant').catch(()=>null);if(acc){r=await req('/api/quick-invoice',acc,'POST',base1);ok(r.status>=400,'no CRM rights → refused')}
+ // свой счёт и свой договор (шаблоны Word)
+ const Docx=require('../lib/docx');const {readZip}=require('../lib/zip');
+ const up=async(type,buf,name)=>req('/api/templates',director,'POST',{fileName:name,type,data:'data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,'+buf.toString('base64')});
+ r=await up('invoice',Docx.sampleInvoice(),'Наш счёт.docx');ok(r.status===201&&r.body.type==='invoice'&&r.body.isDefault&&r.body.fields.includes('Документ.Номер')&&!r.body.unknown.length,'own invoice template uploaded (sample has all fields)');const invTpl=r.body.id;
+ r=await up('contract',Docx.sample(),'Наш договор.docx');const conTpl=r.body.id;ok(r.status===201&&r.body.type==='contract','own contract template uploaded');
+ r=await req('/api/quick-invoice',director,'POST',{...base1,client:{inn:'7728168971'},templateId:invTpl,withContract:true,contractTemplateId:conTpl});
+ ok(r.status===201&&r.body.document.templateId===invTpl&&r.body.contract&&r.body.contract.templateId===conTpl&&r.body.contract.type==='contract','one click: invoice by own template + contract by own template');
+ let f=await req('/api/documents/'+r.body.documentId+'/file?format=docx',director);const x=readZip(f.body).get('word/document.xml').toString();
+ ok(f.status===200&&x.includes(r.body.document.number)&&x.includes('Новострой')&&x.includes('Доставка техники на объект')&&!x.includes('{{'),'own invoice filled: number, client, rows; no placeholders left');
+ r=await req('/api/quick-invoice',director,'POST',{...base1,client:{inn:'7728168971'},templateId:conTpl});ok(r.status>=400&&/другого вида/.test(r.body.error),'contract template cannot be used for an invoice');
+ r=await req('/api/templates/sample?type=invoice',director);ok(r.status===200&&readZip(r.body).get('word/document.xml').toString().includes('Счёт на оплату'),'sample invoice .docx downloadable');
  console.log(`OK quick invoice: ${checks} checks`);
 }catch(e){console.error(e);process.exitCode=1}finally{server.close();fs.rmSync(temp,{recursive:true,force:true})}})();

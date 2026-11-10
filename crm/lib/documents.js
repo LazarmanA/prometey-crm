@@ -1,7 +1,7 @@
 const crypto=require('node:crypto');
 const path=require('node:path');
 const fs=require('node:fs');
-const {renderPdf,convertWithLibreOffice,libreOfficePath}=require('./pdf');
+const {renderPdf,convertWithLibreOffice,libreOfficePath,convertDocxToPdf,docxPdfAvailable}=require('./pdf');
 const Docx=require('./docx');
 let files=null;
 function configure(o){files=o.files||files}
@@ -70,7 +70,7 @@ async function generateFile(store,documentId,directory){const data=store.read(),
   if(!files)fail('Хранилище шаблонов не настроено',500);
   const filled=fillTemplate(data,snap,fs.readFileSync(files.templateFile({fileId:tpl.fileId})));const docxPath=path.join(dir,`v${version.version}.docx`);fs.mkdirSync(dir,{recursive:true,mode:0o700});fs.writeFileSync(docxPath,filled,{mode:0o600});
   meta={path:docxPath,mime:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',ext:'docx',docxPath,size:filled.length};
-  if(libreOfficePath()){const pdf=path.join(dir,`v${version.version}.pdf`);try{await convertWithLibreOffice(filled,'.docx',pdf);meta={...meta,path:pdf,mime:'application/pdf',ext:'pdf',size:fs.statSync(pdf).size}}catch(e){console.warn('[documents] PDF из шаблона не создан:',e.message)}}
+  if(docxPdfAvailable()){const pdf=path.join(dir,`v${version.version}.pdf`);try{await convertDocxToPdf(filled,pdf);meta={...meta,path:pdf,mime:'application/pdf',ext:'pdf',size:fs.statSync(pdf).size}}catch(e){console.warn('[documents] PDF из шаблона не создан:',e.message)}}
  }else{const out=path.join(dir,`v${version.version}.pdf`);await renderPdf(engine=>docHtml(data,snap,engine),out);meta={path:out,mime:'application/pdf',ext:'pdf',size:fs.statSync(out).size}}
  return store.transaction(d=>{const x=d.documents.find(x=>x.id===doc.id);if(!x)fail('Документ исчез во время генерации',409);x.file={...meta,version:version.version,generatedAt:new Date().toISOString()};x.fileError='';x.updatedAt=x.file.generatedAt;return {changed:true,body:x.file}}).body}
 function fillTemplate(data,doc,buffer){const ctx=doc.renderContext||{};const items=(doc.items&&doc.items.length?doc.items:ctx.planItems)||[];const totals=doc.items&&doc.items.length?{totalNet:doc.totalNet,vatTotal:doc.vatTotal,totalGross:doc.totalGross,vatRate:doc.vatRate}:(()=>{const r=n=>Math.round(n*100)/100;const t={totalNet:0,vatTotal:0,totalGross:0,vatRate:doc.vatRate};for(const i of items){t.totalNet=r(t.totalNet+(i.net||0));t.vatTotal=r(t.vatTotal+(i.vat||0));t.totalGross=r(t.totalGross+(i.gross||0))}return t})();return Docx.fill(buffer,{doc,entity:ctx.legalEntity||{},client:ctx.client||{},order:ctx.order||{},object:ctx.object||{},items,totals,images:docImages(ctx.legalEntity||{},doc.facsimile!==false)})}

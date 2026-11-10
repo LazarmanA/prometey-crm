@@ -14,6 +14,9 @@ const FIELDS=[
   ['Договор.Номер','Номер договора',c=>c.doc.number],
   ['Договор.Дата','Дата договора: 30.10.2026',c=>W.dateRu(c.doc.date)],
   ['Договор.ДатаТекстом','Дата: «30» октября 2026 г.',c=>W.dateText(c.doc.date)],
+  ['Документ.Номер','Номер документа — счёта, договора, договора-счёта',c=>c.doc.number],
+  ['Документ.Дата','Дата документа: 30.10.2026',c=>W.dateRu(c.doc.date)],
+  ['Документ.ДатаТекстом','Дата документа: «30» октября 2026 г.',c=>W.dateText(c.doc.date)],
  ]],
  ['Наша организация (исполнитель)',[
   ['Наша.Наименование','Полное наименование',c=>c.entity.name],
@@ -112,7 +115,7 @@ function placeImages(files,out,images){
 }
 const norm=s=>String(s).toLowerCase().replace(/ё/g,'е').replace(/[\s_]/g,'');
 const INDEX=new Map();for(const [,list] of FIELDS)for(const [key,,get] of list)INDEX.set(norm(key),{key,get,row:key.startsWith('Строка.')});
-for(const [alias,key] of [['Факсимиле','Подпись'],['МП','Печать'],['М.П.','Печать']])INDEX.set(norm(alias),INDEX.get(norm(key)));
+for(const [alias,key] of [['Факсимиле','Подпись'],['МП','Печать'],['М.П.','Печать'],['Счёт.Номер','Документ.Номер'],['Счет.Номер','Документ.Номер'],['Счёт.Дата','Документ.Дата'],['Счет.Дата','Документ.Дата'],['Счёт.ДатаТекстом','Документ.ДатаТекстом'],['Счет.ДатаТекстом','Документ.ДатаТекстом']])INDEX.set(norm(alias),INDEX.get(norm(key)));
 const fieldList=()=>FIELDS.map(([group,list])=>({group,fields:list.map(([key,label])=>({key,label,code:'{{'+key+'}}'}))}));
 
 const decode=s=>s.replace(/&(amp|lt|gt|quot|apos|#\d+|#x[0-9a-f]+);/gi,(m,e)=>({amp:'&',lt:'<',gt:'>',quot:'"',apos:"'"}[e.toLowerCase()]??String.fromCodePoint(e[1].toLowerCase()==='x'?parseInt(e.slice(2),16):parseInt(e.slice(1),10))));
@@ -208,4 +211,33 @@ function sample(){
   ['word/document.xml',doc],['word/styles.xml',styles],
  ]));
 }
-module.exports={imageSize,FIELDS,fieldList,inspect,fill,sample,fillXml,scanXml};
+// Образец счёта на оплату: банковский блок, поставщик/покупатель, таблица, итоги, подписи
+function sampleInvoice(){
+ const enc=t=>encode(t);
+ const run=(t,{b,sz}={})=>`<w:r>${b||sz?`<w:rPr>${b?'<w:b/>':''}${sz?`<w:sz w:val="${sz}"/>`:''}</w:rPr>`:''}<w:t xml:space="preserve">${enc(t)}</w:t></w:r>`;
+ const p=(t,o={},jc)=>`<w:p>${jc?`<w:pPr><w:jc w:val="${jc}"/></w:pPr>`:''}${run(t,o)}</w:p>`;
+ const all='<w:tblBorders>'+['top','left','bottom','right','insideH','insideV'].map(x=>`<w:${x} w:val="single" w:sz="4" w:space="0" w:color="000000"/>`).join('')+'</w:tblBorders>';
+ const tbl=(widths,rows)=>`<w:tbl><w:tblPr><w:tblW w:w="${widths.reduce((a,b)=>a+b,0)}" w:type="dxa"/><w:tblLayout w:type="fixed"/>${all}</w:tblPr><w:tblGrid>${widths.map(w=>`<w:gridCol w:w="${w}"/>`).join('')}</w:tblGrid>${rows.map(r=>`<w:tr>${r.map((c,i)=>`<w:tc><w:tcPr><w:tcW w:w="${widths[i]}" w:type="dxa"/></w:tcPr>${p(c[0],{b:c[1],sz:19},c[2])}</w:tc>`).join('')}</w:tr>`).join('')}</w:tbl>`;
+ const bank=tbl([5600,1100,2950],[[['{{Наша.Банк}}'],['БИК'],['{{Наша.БИК}}']],[['Банк получателя',false],['Сч. №'],['{{Наша.КоррСчет}}']],[['ИНН {{Наша.ИНН}}   КПП {{Наша.КПП}}'],['Сч. №'],['{{Наша.РасчетныйСчет}}']],[['{{Наша.Наименование}}'],[''],['']],[['Получатель'],[''],['']]]);
+ const W=[500,4300,1000,900,1450,1500];
+ const items=tbl(W,[[['№',true,'center'],['Товары (работы, услуги)',true],['Кол-во',true],['Ед.',true],['Цена',true],['Сумма',true]],[['{{Строка.№}}',false,'center'],['{{Строка.Наименование}}'],['{{Строка.Количество}}'],['{{Строка.Ед}}'],['{{Строка.Цена}}',false,'right'],['{{Строка.Сумма}}',false,'right']]]);
+ const body=[
+  p('{{Логотип}}'),bank,p(''),
+  p('Счёт на оплату № {{Документ.Номер}} от {{Документ.ДатаТекстом}}',{b:true,sz:30}),
+  `<w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="12" w:space="1" w:color="000000"/></w:pBdr></w:pPr></w:p>`,
+  p('Поставщик (исполнитель): {{Наша.Наименование}}, ИНН {{Наша.ИНН}}, КПП {{Наша.КПП}}, {{Наша.Адрес}}'),
+  p('Покупатель (заказчик): {{Клиент.Наименование}}, ИНН {{Клиент.ИНН}}, КПП {{Клиент.КПП}}, {{Клиент.Адрес}}'),
+  p('Основание: сделка {{Сделка.Номер}}, объект {{Объект.Адрес}}'),
+  items,
+  p('Итого: {{Сумма}}',{b:true},'right'),p('В том числе НДС ({{СтавкаНДС}}): {{НДС}}',{b:true},'right'),
+  p('Всего к оплате: {{Сумма}} ({{СуммаПрописью}})'),
+  p('Оплата этого счёта означает согласие с условиями оказания услуг. Счёт действителен 5 банковских дней.',{sz:18}),
+  p(''),p(''),
+  p('Руководитель {{Подпись}}{{Печать}} / {{Наша.ПодписантКратко}} /          Бухгалтер ____________'),
+ ].join('');
+ const zip=readZip(sample());
+ const docXml=zip.get('word/document.xml').toString('utf8');
+ zip.set('word/document.xml',Buffer.from(docXml.replace(/<w:body>[\s\S]*<w:sectPr>/,'<w:body>'+body+'<w:sectPr>'),'utf8'));
+ return writeZip(zip);
+}
+module.exports={imageSize,FIELDS,fieldList,inspect,fill,sample,sampleInvoice,fillXml,scanXml};

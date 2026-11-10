@@ -45,7 +45,8 @@ const browser=[
  ['UI: подпись и печать, документы из карточки компании','tests/facsimile-browser-test.js'],
  ['UI: Сделки → Выставить счёт','tests/quick-invoice-browser-test.js'],
  ['UI: журнал работ в сделке','tests/journal-browser-test.js'],
- ['UI: вкладка КП','tests/proposals-browser-test.js']
+ ['UI: вкладка КП','tests/proposals-browser-test.js'],
+ ['UI: Быстрый счёт, свой счёт и договор','tests/own-templates-browser-test.js']
 ];
 const suites=noBrowser?backend:[...backend,...browser];
 const results=[];

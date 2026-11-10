@@ -50,7 +50,9 @@ async function scenario(browser,mode,url){
  await page.locator('#global-query').blur();
 
  // Alt+цифра — навигация по меню
- await page.keyboard.press('Alt+Digit9'); // 9-й пункт меню — «Компании» (после «Ленты» и «КП»)
+ await page.keyboard.press('Alt+Digit5'); // 5-й пункт меню — «Сделки»
+ await page.waitForFunction(()=>document.querySelector('.nav [data-page="orders"]')?.classList.contains('active'));
+ await page.locator('.nav [data-page="clients"]').click();
  await page.waitForFunction(()=>document.querySelector('.nav [data-page="clients"]')?.classList.contains('active'));
  await page.locator('#add-client').waitFor();
 

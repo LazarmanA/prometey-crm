@@ -5,7 +5,7 @@ const paymentLabel=s=>({unpaid:'Не оплачен',partial:'Частично',
 const docUnits=[['shift','Смена'],['hour','Час'],['trip','Рейс'],['unit','Единица'],['day','Сутки'],['machine_hour','Машино-час'],['km','Км'],['ton','Тонна'],['m3','м³']];
 
 async function documentsPage(p){
- const views=[['docs','Документы'],['companies','Наши организации'],['templates','Шаблоны договоров']];
+ const views=[['docs','Документы'],['companies','Наши организации'],['templates','Шаблоны счёта и договора']];
  const viewTabs=`<div class="segmented doc-views">${views.map(([v,t])=>`<button data-doc-view="${v}" class="${documentView===v?'active':''}">${t}</button>`).join('')}</div>`;
  if(documentView!=='docs'){p.innerHTML=`<div class="page-head"><div><h1>Документы</h1><p>Счета, договоры, реквизиты, логотипы и свои шаблоны.</p></div></div>${viewTabs}<div id="doc-view"></div>`;p.querySelectorAll('[data-doc-view]').forEach(b=>b.onclick=()=>{documentView=b.dataset.docView;renderPage()});return documentView==='companies'?ourCompaniesView(p.querySelector('#doc-view')):templatesView(p.querySelector('#doc-view'))}
  const qs=new URLSearchParams();if(documentType!=='all')qs.set('type',documentType);

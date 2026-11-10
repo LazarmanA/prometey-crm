@@ -82,7 +82,9 @@ function createQuickInvoice({CRM,Documents}){
   }
   const doc=Documents.issue(d,u,{type,orderId:order.id,legalEntityId:b.legalEntityId,source:'plan',vatRate:b.vatRate,vatIncluded:b.vatIncluded!==false,facsimile:b.facsimile!==false,
    templateId:b.templateId||'',items:items.map(i=>({description:i.description,quantity:i.quantity,unit:i.unit,rate:i.rate,...(i.sourceId?{sourceType:'orderItem',sourceId:i.sourceId}:{})}))});
-  return {documentId:doc.doc.id,orderId:order.id,clientId:client.id,created:{client:clientCreated,object:objectCreated,order:orderCreated}};
+  // по желанию — сразу и договор (свой шаблон или стандартный)
+  let contractId='';if(b.withContract&&type==='invoice'){const c=Documents.issue(d,u,{type:'contract',orderId:order.id,legalEntityId:b.legalEntityId,source:'plan',facsimile:b.facsimile!==false,templateId:b.contractTemplateId||''});contractId=c.doc.id}
+  return {documentId:doc.doc.id,contractId,orderId:order.id,clientId:client.id,created:{client:clientCreated,object:objectCreated,order:orderCreated}};
  }
  return {context,issue};
 }

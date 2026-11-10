@@ -80,8 +80,8 @@ async function documentsApi(req,res,url,user,body){
  if(p==='/api/quick-invoice/context'&&req.method==='GET'){const d=store.read();return json(res,200,QuickInvoice.context(d,user,url.searchParams.get('clientId')||''))}
  if(p==='/api/quick-invoice'&&req.method==='POST'){
   const r=store.transaction(d=>({changed:true,body:QuickInvoice.issue(d,user,body)})).body;
-  try{await Documents.generateFile(store,r.documentId,DOCUMENTS_DIR)}catch(e){Documents.markFileError(store,r.documentId,e)}
-  const d=store.read();return json(res,201,{...r,document:Documents.decorate(d,d.documents.find(x=>x.id===r.documentId))});
+  for(const id of [r.documentId,r.contractId].filter(Boolean)){try{await Documents.generateFile(store,id,DOCUMENTS_DIR)}catch(e){Documents.markFileError(store,id,e)}}
+  const d=store.read();return json(res,201,{...r,document:Documents.decorate(d,d.documents.find(x=>x.id===r.documentId)),contract:r.contractId?Documents.decorate(d,d.documents.find(x=>x.id===r.contractId)):null});
  }
  if(p==='/api/documents/issue'&&req.method==='POST'){
   const issued=store.transaction(d=>{const x=Documents.issue(d,user,body);return {changed:true,body:{id:x.doc.id}}}).body;
@@ -114,7 +114,7 @@ async function filesApi(req,res,url,user,body){
  if(logo&&m==='GET'){for(const [mime,ext] of [['image/png','.png'],['image/jpeg','.jpg'],['image/webp','.webp']]){const f=Files.logoFile({fileId:logo[1],mime});if(f)return sendFile(res,f,mime,'logo'+ext,{inline:true,cache:'private, max-age=31536000, immutable'})}throw Object.assign(new Error('Логотип не найден'),{status:404})}
  if(p==='/api/files/logo'&&m==='POST'){const r=store.transaction(d=>({changed:true,body:Files.setLogo(d,user,body,CRM)}));return json(res,200,r.body)}
  if(p==='/api/templates/fields'&&m==='GET')return json(res,200,require('./lib/docx').fieldList());
- if(p==='/api/templates/sample'&&m==='GET'){const tmp=path.join(UPLOADS_DIR,'sample-'+crypto.randomUUID()+'.docx');fs.mkdirSync(UPLOADS_DIR,{recursive:true,mode:0o700});fs.writeFileSync(tmp,require('./lib/docx').sample());res.on('close',()=>fs.rmSync(tmp,{force:true}));return sendFile(res,tmp,'application/vnd.openxmlformats-officedocument.wordprocessingml.document','Образец договора ПРОМЕТЕЙ.docx')}
+ if(p==='/api/templates/sample'&&m==='GET'){const tmp=path.join(UPLOADS_DIR,'sample-'+crypto.randomUUID()+'.docx');fs.mkdirSync(UPLOADS_DIR,{recursive:true,mode:0o700});const inv=url.searchParams.get('type')==='invoice';fs.writeFileSync(tmp,inv?require('./lib/docx').sampleInvoice():require('./lib/docx').sample());res.on('close',()=>fs.rmSync(tmp,{force:true}));return sendFile(res,tmp,'application/vnd.openxmlformats-officedocument.wordprocessingml.document',inv?'Образец счёта ПРОМЕТЕЙ.docx':'Образец договора ПРОМЕТЕЙ.docx')}
  if(p==='/api/templates'&&m==='GET')return json(res,200,Files.listTemplates(store.read(),url.searchParams.get('type')||''));
  if(p==='/api/templates'&&m==='POST'){const r=store.transaction(d=>({changed:true,body:Files.uploadTemplate(d,user,body)}));return json(res,201,r.body)}
  const one=p.match(/^\/api\/templates\/(tpl_[0-9a-f-]{36})(\/file)?$/);

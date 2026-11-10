@@ -38,4 +38,16 @@ async function convertWithLibreOffice(buffer,ext,outFile,lo=libreOfficePath()){
  const id='prometey-'+process.pid+'-'+Date.now()+'-'+Math.random().toString(16).slice(2),tmpdir=fs.mkdtempSync(path.join(os.tmpdir(),id+'-')),input=path.join(tmpdir,id+ext),profile=path.join(tmpdir,'profile');fs.writeFileSync(input,buffer,{mode:0o600});
  try{await run(lo,[`-env:UserInstallation=${fileUrl(profile)}`,'--headless','--convert-to','pdf','--outdir',tmpdir,input],60000);const generated=path.join(tmpdir,id+'.pdf');if(!fs.existsSync(generated)||fs.statSync(generated).size<500)throw Object.assign(new Error('LibreOffice не создал PDF'),{status:500});fs.mkdirSync(path.dirname(outFile),{recursive:true,mode:0o700});fs.copyFileSync(generated,outFile)}finally{fs.rmSync(tmpdir,{recursive:true,force:true})}
 }
-module.exports={convertWithLibreOffice,renderPdf,renderForm,chromiumPath,libreOfficePath,pdfEngine};
+// Microsoft Word на Windows: .docx → PDF через COM (если Word установлен). Нужен, когда нет LibreOffice.
+let wordCache;
+function msWordAvailable(){if(process.platform!=='win32'||process.env.PROMETEY_NO_WORD)return false;if(wordCache!==undefined)return wordCache;
+ try{const r=require('node:child_process').spawnSync('reg',['query','HKCR\\Word.Application\\CurVer'],{windowsHide:true,timeout:5000});wordCache=r.status===0}catch{wordCache=false}return wordCache}
+async function convertWithWord(buffer,outFile){
+ const tmpdir=fs.mkdtempSync(path.join(os.tmpdir(),'prometey-word-')),input=path.join(tmpdir,'doc.docx'),output=path.join(tmpdir,'doc.pdf');fs.writeFileSync(input,buffer,{mode:0o600});
+ const q=s=>"'"+String(s).replace(/'/g,"''")+"'";
+ const script=`$ErrorActionPreference='Stop';$w=New-Object -ComObject Word.Application;$w.Visible=$false;$w.DisplayAlerts=0;try{$d=$w.Documents.Open(${q(input)},$false,$true,$false);try{$d.ExportAsFixedFormat(${q(output)},17)}finally{$d.Close(0)}}finally{$w.Quit();[void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($w)}`;
+ try{await run('powershell.exe',['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-Command',script],120000);if(!fs.existsSync(output)||fs.statSync(output).size<500)throw Object.assign(new Error('Word не создал PDF'),{status:500});fs.mkdirSync(path.dirname(outFile),{recursive:true,mode:0o700});fs.copyFileSync(output,outFile)}finally{fs.rmSync(tmpdir,{recursive:true,force:true})}
+}
+function docxPdfAvailable(){return !!libreOfficePath()||msWordAvailable()}
+async function convertDocxToPdf(buffer,outFile){if(libreOfficePath())return convertWithLibreOffice(buffer,'.docx',outFile);if(msWordAvailable())return convertWithWord(buffer,outFile);throw Object.assign(new Error('Для PDF из своего шаблона нужен LibreOffice или Microsoft Word'),{status:503})}
+module.exports={convertWithLibreOffice,convertDocxToPdf,docxPdfAvailable,msWordAvailable,renderPdf,renderForm,chromiumPath,libreOfficePath,pdfEngine};

@@ -20,6 +20,8 @@ async function dropFile(page,selector,name,mime,buffer){
  await page.locator('.nav [data-page="documents"]').click();
  await page.locator('[data-doc-view="templates"]').click();await page.locator('.dropzone').waitFor();
  if(shots)await page.screenshot({path:path.join(shots,'f1-templates-empty.png'),fullPage:true});
+ // вид документа — «Свой договор»
+ await page.locator('.tpl-kind:has-text("Свой договор")').first().click();await page.locator('.tpl-kind.on:has-text("Свой договор")').waitFor();
  // неверный формат
  await dropFile(page,'.dropzone','Договор.doc','application/msword',Buffer.from('xx'));await page.getByText('старый формат .doc').waitFor();
  // образец → обратно перетаскиванием
