@@ -33,6 +33,7 @@ const Avito=require('./lib/avito').createAvito({dataDir:path.dirname(DB_FILE),st
 const LicenseLib=require('./lib/license');
 const License=LicenseLib.createLicense({dataDir:path.dirname(DB_FILE),store,version:VERSION,collect:LicenseLib.collector({store,dbFile:DB_FILE,pdfEngine,backupsDir:()=>process.env.BACKUP_DIR||path.join(path.dirname(DB_FILE),'backups'),logFile:process.env.PROMETEY_LAUNCHER_LOG||'',extra:d=>Privacy.forVendor(d)})});
 const Journal=require('./lib/journal').createJournal({CRM});
+const Proposals=require('./lib/proposals').createProposals({Access,files:Files,Docx:require('./lib/docx'),renderPdf:require('./lib/pdf').renderPdf});
 const QuickInvoice=require('./lib/quickinvoice').createQuickInvoice({CRM,Documents});
 const Company=require('./lib/company').createCompany({license:License,files:Files,recovery:Recovery});
 const Privacy=require('./lib/privacy').createPrivacy({store,license:License});
@@ -103,7 +104,7 @@ async function documentsApi(req,res,url,user,body){
  throw Object.assign(new Error('Операция документов не найдена'),{status:404});
 }
 
-function sendBuffer(res,buf,mime,name){res.statusCode=200;res.setHeader('Content-Type',mime);res.setHeader('Content-Length',buf.length);res.setHeader('Cache-Control','private, no-store');res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Content-Disposition',`attachment; filename*=UTF-8''${encodeURIComponent(name)}`);res.end(buf)}
+function sendBuffer(res,buf,mime,name){res.statusCode=200;res.setHeader('Content-Type',mime);res.setHeader('Content-Length',buf.length);res.setHeader('Cache-Control','private, no-store');res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Content-Disposition',`attachment; filename="${String(name).replace(/[^\x20-\x7e]/g,'_').replace(/["\\]/g,'_')}"; filename*=UTF-8''${encodeURIComponent(name)}`);res.end(buf)}
 // Тело запроса как есть (архив переноса) — во временный файл, с ограничением размера.
 function readRaw(req,limit){return new Promise((resolve,reject)=>{const chunks=[];let size=0,failed=false;req.on('data',c=>{if(failed)return;size+=c.length;if(size>limit){failed=true;reject(Object.assign(new Error('Архив больше 900 МБ'),{status:413}));req.resume();return}chunks.push(c)});req.on('end',()=>{if(!failed)resolve(Buffer.concat(chunks))});req.on('error',reject)})}
 function sendFile(res,file,mime,name,{inline=false,cache='private, no-store'}={}){res.statusCode=200;res.setHeader('Content-Type',mime);res.setHeader('Content-Length',fs.statSync(file).size);res.setHeader('Cache-Control',cache);res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Content-Disposition',`${inline?'inline':'attachment'}; filename*=UTF-8''${encodeURIComponent(name)}`);return fs.createReadStream(file).pipe(res)}
@@ -204,6 +205,13 @@ async function api(req,res,url){
  if(recordingRoute)return await recordingHandler(req,res,recordingRoute,user);
  if(url.pathname.startsWith('/api/files/')||url.pathname==='/api/templates'||url.pathname.startsWith('/api/templates/'))return filesApi(req,res,url,user,body);
  if(url.pathname.startsWith('/api/documents')||url.pathname.startsWith('/api/quick-invoice'))return documentsApi(req,res,url,user,body);
+ if(url.pathname==='/api/proposals'||url.pathname.startsWith('/api/proposals/')){const parts=url.pathname.split('/').slice(3).map(decodeURIComponent),[id,sub]=parts;
+  if(req.method==='GET'&&!id)return json(res,200,{items:Proposals.list(store.read(),user,url.searchParams.get('q')||''),defaults:Proposals.defaults(store.read(),user)});
+  if(req.method==='POST'&&id==='preview'){const html=Proposals.preview(store.read(),user,body);res.statusCode=200;res.setHeader('Content-Type','text/html; charset=utf-8');res.setHeader('Cache-Control','no-store');res.setHeader('Content-Security-Policy',"default-src 'none'; img-src data:; style-src 'unsafe-inline'");return res.end(html)}
+  if(req.method==='GET'&&id&&sub==='file'){const f=await Proposals.file(store.read(),user,id,url.searchParams.get('format')==='docx'?'docx':'pdf');store.transaction(d=>({changed:true,body:Proposals.markSent(d,user,id)}));return sendBuffer(res,f.buffer,f.type,f.name)}
+  if(req.method==='GET'&&id&&!sub)return json(res,200,Proposals.get(store.read(),user,id));
+  const r=store.transaction(d=>{let out;if(req.method==='POST'&&!id)out=Proposals.create(d,user,body);else if(req.method==='POST'&&sub==='copy')out=Proposals.copy(d,user,id);else if(req.method==='PATCH'&&id&&!sub)out=Proposals.update(d,user,id,body);else if(req.method==='DELETE'&&id&&!sub)out=Proposals.remove(d,user,id);else{const e=new Error('Not found');e.status=404;throw e}return {changed:true,body:out}});
+  return json(res,req.method==='POST'?201:200,r.body)}
  {const jm=url.pathname.match(/^\/api\/deals\/([^/]+)\/journal(?:\/(copy|[^/]+))?$/);if(jm){const id=decodeURIComponent(jm[1]),sub=jm[2]?decodeURIComponent(jm[2]):'';
   if(req.method==='GET'&&!sub)return json(res,200,Journal.view(store.read(),user,id));
   const r=store.transaction(d=>{let out;if(req.method==='POST'&&!sub)out=Journal.add(d,user,id,body);else if(req.method==='POST'&&sub==='copy')out=Journal.copy(d,user,id,body);else if(req.method==='PATCH'&&sub)out=Journal.update(d,user,id,sub,body);else if(req.method==='DELETE'&&sub)out=Journal.remove(d,user,id,sub);else{const e=new Error('Not found');e.status=404;throw e}return {changed:true,body:out}});
