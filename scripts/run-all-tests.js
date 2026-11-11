@@ -48,7 +48,8 @@ const browser=[
  ['UI: вкладка КП','tests/proposals-browser-test.js'],
  ['UI: Быстрый счёт, свой счёт и договор','tests/own-templates-browser-test.js'],
  ['UI: сделки — фильтры и видимость','tests/deals-browser-test.js'],
- ['UI: бухгалтерия — подписи и образцы УПД','tests/accounting-signers-browser-test.js']
+ ['UI: бухгалтерия — подписи и образцы УПД','tests/accounting-signers-browser-test.js'],
+ ['Перенос: добавить ленту из архива','tests/feed-import-test.js']
 ];
 const suites=noBrowser?backend:[...backend,...browser];
 const results=[];

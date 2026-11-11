@@ -125,7 +125,7 @@ async function adminTransfer(box){
   <a class="btn btn-primary" id="tr-export" href="/api/admin/transfer/export" download>Скачать архив переноса</a>
   <p class="muted small">Сохраните файл, затем откройте CRM на сервере и загрузите его там (шаг 2). Архив содержит все данные компании — не пересылайте его посторонним.</p></div>
  <div class="panel transfer-card"><div class="transfer-step">2</div><h3>Загрузить на новом месте</h3>
-  <p>На сервере или другом компьютере: выберите архив переноса. <b>Все данные этой CRM заменятся данными из архива.</b> Перед заменой делается резервная копия.</p>
+  <p>На сервере или другом компьютере: выберите архив переноса. Можно <b>добавить только ленту</b> (документы и сообщения) к текущим данным или <b>заменить всё</b>. Перед загрузкой делается резервная копия.</p>
   <input type="file" id="tr-file" accept=".zip,application/zip" hidden><button class="btn btn-light" id="tr-pick">Выбрать архив…</button>
   <div id="tr-check" class="transfer-check" hidden></div>
   <p class="muted small">После загрузки все входят своими прежними e-mail и паролями.</p></div>
@@ -136,12 +136,20 @@ async function adminTransfer(box){
  box.querySelector('#tr-export').addEventListener('click',()=>toast('Готовим архив — загрузка начнётся через несколько секунд'));
  box.querySelector('#tr-pick').onclick=()=>pick.click();
  pick.onchange=()=>{const f=pick.files[0];if(!f)return;check.hidden=false;
-  check.innerHTML=`<p>Файл: <b>${esc(f.name)}</b>, ${(f.size/1048576).toFixed(1).replace('.',',')} МБ</p><label for="tr-confirm">Чтобы заменить данные, напишите слово <b>ЗАМЕНИТЬ</b></label><input class="field" id="tr-confirm" autocomplete="off"><button class="btn btn-danger" id="tr-go" disabled>Загрузить и заменить данные</button><div class="muted small" id="tr-status"></div>`;
-  const go=check.querySelector('#tr-go'),conf=check.querySelector('#tr-confirm'),status=check.querySelector('#tr-status');
-  conf.oninput=()=>{go.disabled=conf.value.trim().toUpperCase()!=='ЗАМЕНИТЬ'};
-  go.onclick=async()=>{go.disabled=true;conf.disabled=true;status.textContent='Загружаем архив…';
-   try{const r=await fetch('/api/admin/transfer/import',{method:'POST',headers:{'content-type':'application/zip',...(token?{authorization:'Bearer '+token}:{})},body:f,credentials:'same-origin'});const j=await r.json().catch(()=>({error:'Нет ответа от CRM'}));if(!r.ok)throw new Error(j.error||'Ошибка загрузки');
+  check.innerHTML=`<p>Файл: <b>${esc(f.name)}</b>, ${(f.size/1048576).toFixed(1).replace('.',',')} МБ</p>
+   <div class="tr-modes" role="radiogroup" aria-label="Что сделать с архивом">
+    <label class="tr-mode"><input type="radio" name="tr-mode" value="feed" checked><span><b>Добавить только ленту</b><br><span class="muted small">Сообщения ленты с файлами (документы, фото) добавятся к этой CRM. Компании, сделки и сотрудники здесь не меняются. Повторная загрузка не создаст дублей.</span></span></label>
+    <label class="tr-mode"><input type="radio" name="tr-mode" value="all"><span><b>Заменить все данные</b><br><span class="muted small">Вся эта CRM заменится данными из архива.</span></span></label></div>
+   <div id="tr-confirm-box" hidden><label for="tr-confirm">Чтобы заменить данные, напишите слово <b>ЗАМЕНИТЬ</b></label><input class="field" id="tr-confirm" autocomplete="off"></div>
+   <button class="btn btn-primary" id="tr-go">Добавить ленту</button><div class="muted small" id="tr-status"></div>`;
+  const go=check.querySelector('#tr-go'),conf=check.querySelector('#tr-confirm'),status=check.querySelector('#tr-status'),cbox=check.querySelector('#tr-confirm-box');
+  const mode=()=>check.querySelector('[name="tr-mode"]:checked').value;
+  const sync=()=>{const all=mode()==='all';cbox.hidden=!all;go.className='btn '+(all?'btn-danger':'btn-primary');go.textContent=all?'Загрузить и заменить данные':'Добавить ленту';go.disabled=all&&conf.value.trim().toUpperCase()!=='ЗАМЕНИТЬ'};
+  check.querySelectorAll('[name="tr-mode"]').forEach(r=>r.onchange=sync);conf.oninput=sync;sync();
+  go.onclick=async()=>{const m=mode();go.disabled=true;conf.disabled=true;status.textContent='Загружаем архив…';
+   try{const r=await fetch('/api/admin/transfer/import'+(m==='feed'?'?mode=feed':''),{method:'POST',headers:{'content-type':'application/zip',...(token?{authorization:'Bearer '+token}:{})},body:f,credentials:'same-origin'});const j=await r.json().catch(()=>({error:'Нет ответа от CRM'}));if(!r.ok)throw new Error(j.error||'Ошибка загрузки');
+    if(m==='feed'){status.textContent='';sheet('Лента добавлена',`<p>Добавлено сообщений: <b>${j.posts}</b>, файлов: <b>${j.files}</b>.${j.skipped?` Уже были здесь и пропущены: ${j.skipped}.`:''}${j.missing?` Не нашлось в архиве файлов: ${j.missing}.`:''}</p>${j.authors?.length?`<p>Авторы сообщений: ${esc(j.authors.join(', '))}.</p>`:''}<p class="muted small">Копия базы до загрузки: ${esc(j.backup)}.</p>`,[{text:'Открыть ленту',cls:'btn-primary',onClick:()=>{current='feed';workspaceSelection=null;renderApp()}}]);go.disabled=false;conf.disabled=false;return}
     sheet('Данные перенесены',`<p>Загружено: ${j.counts.clients} компаний, ${j.counts.orders} сделок, ${j.counts.feed} сообщений ленты, ${j.counts.messages} сообщений в сделках, ${j.counts.users} сотрудников, ${j.files} файлов.</p><p>Теперь войдите своим e-mail и паролем из прежней CRM. Копия прежней базы сохранена: ${esc(j.backup)}.</p>`,[{text:'Перейти ко входу',cls:'btn-primary',onClick:()=>{token='';me=null;renderLogin()}}]);
-   }catch(e){status.textContent=e.message;toast(e.message,true);go.disabled=false;conf.disabled=false}};
+   }catch(e){status.textContent=e.message;toast(e.message,true);sync();conf.disabled=false}};
  };
 }

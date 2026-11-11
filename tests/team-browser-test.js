@@ -81,7 +81,7 @@ const PNG=Buffer.from('89504e470d0a1a0a0000000d494844520000004000000030080200000
  dl=page.waitForEvent('download');await page.locator('#tr-export').click();const z=await dl;ok(/prometey-perenos-.*\.zip$/.test(z.suggestedFilename()),'transfer archive downloads from Администрирование → Перенос данных');
  const zf=path.join(temp,'perenos.zip');await z.saveAs(zf);
  const ch=page.waitForEvent('filechooser');await page.locator('#tr-pick').click();await (await ch).setFiles({name:'perenos.zip',mimeType:'application/zip',buffer:fs.readFileSync(zf)});
- ok(await page.locator('#tr-go').isDisabled(),'replace button locked until ЗАМЕНИТЬ is typed');
+ ok(await page.locator('[name="tr-mode"][value="feed"]').isChecked(),'safe mode «Добавить только ленту» is preselected');await page.locator('[name="tr-mode"][value="all"]').check();ok(await page.locator('#tr-go').isDisabled(),'replace button locked until ЗАМЕНИТЬ is typed');
  await page.locator('#tr-confirm').fill('заменить');await page.locator('#tr-go').click();await page.getByText('Данные перенесены').waitFor({timeout:30000});ok(true,'archive loaded back from the browser');
  await page.locator('.modal-foot').getByRole('button',{name:'Перейти ко входу'}).click();await page.locator('#login-email').fill('boss@kran.ru');await page.locator('#login-pass').fill('Kran-Boss-2026!');await page.locator('#login-pass').press('Enter');await page.locator('.nav').waitFor();ok(true,'owner signs in again after the transfer');
  // забыли пароль: вход по коду восстановления
