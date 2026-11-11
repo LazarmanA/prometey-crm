@@ -1,0 +1,25 @@
+/* Интеграции → Авито: заявки из мессенджера (и звонки) Авито попадают в «Лиды» с источником «Авито». */
+async function mountAvito(p,offline){
+ const panel=document.createElement('section');panel.className='panel avito-panel';const grid=p.querySelector('.module-grid');if(grid)grid.after(panel);else p.append(panel);
+ if(offline){panel.innerHTML='<h2>Авито → Лиды</h2><p class="muted">Подключение Авито доступно в установленной CRM.</p>';return}
+ if(!can('settings')){panel.innerHTML='<h2>Авито → Лиды</h2><p class="muted">Подключение настраивает руководитель. Заявки с Авито появляются в разделе «Лиды» с источником «Авито».</p>';return}
+ let a;try{a=await api('/api/integrations/avito')}catch(e){panel.textContent='Авито: '+e.message;return}
+ const dt=v=>v?new Date(v).toLocaleString('ru-RU'):'—';
+ panel.innerHTML=`<div class="chat-heading"><h2>Авито → Лиды</h2><span class="badge ${a.enabled?(a.lastError?'badge-warn':'badge-ok'):'badge-muted'}">${a.enabled?(a.lastError?'Включено · есть ошибка':'Включено'):'Выключено'}</span></div>
+ <p>Новые сообщения покупателей в Авито сами появляются в «Лидах» с источником «Авито»: имя покупателя, объявление, текст сообщения и ссылка на чат. Следующие сообщения из того же чата добавляются в историю этого же лида. CRM проверяет Авито каждые 2 минуты — «белый» адрес и настройка сети не нужны.</p>
+ <details class="avito-help"><summary>Где взять ключи</summary><ol><li>Войдите в Авито под аккаунтом компании → «Профиль» → «Для профессионалов» → «API» (developers.avito.ru → «Получить доступ к API»).</li><li>Скопируйте <b>client_id</b> и <b>client_secret</b> и вставьте ниже.</li><li>Для получения сообщений нужен тариф Авито с доступом к API мессенджера.</li></ol></details>
+ <div class="form-grid">${input('av-id','client_id',a.clientId,'text',true,'autocomplete="off"')}${input('av-secret','client_secret',''  ,'password',!a.hasSecret,`autocomplete="new-password" placeholder="${a.hasSecret?'сохранён — введите, чтобы заменить':''}"`)}${select('av-owner','Ответственный за новые лиды',[['','Руководитель (по умолчанию)'],...a.owners.map(u=>[u.id,u.name])],a.ownerId)}<label class="check full"><input type="checkbox" id="av-calls" ${a.calls?'checked':''}> Также звонки с Авито (если подключён коллтрекинг Авито) — лид с номером телефона</label></div>
+ <div class="actions"><button class="btn btn-primary" id="av-save">${a.enabled?'Сохранить':'Сохранить и включить'}</button><button class="btn btn-light" id="av-test">Проверить подключение</button><button class="btn btn-light" id="av-sync" ${a.clientId?'':'disabled'}>Загрузить сейчас</button>${a.enabled?'<button class="btn btn-ghost" id="av-off">Выключить</button>':''}</div>
+ <dl class="ws-facts avito-facts"><div><dt>Аккаунт Авито</dt><dd>${esc(a.account||'—')}</dd></div><div><dt>Последняя проверка</dt><dd>${esc(dt(a.lastPollAt))}</dd></div><div><dt>Лидов с Авито</dt><dd>сегодня ${a.leadsToday} · всего ${a.leadsTotal}</dd></div></dl>
+ ${a.lastError?`<div class="code-note">Ошибка: ${esc(a.lastError)}</div>`:''}
+ <details class="avito-help"><summary>Мгновенно через вебхук (если CRM открыта в интернете по https)</summary><p class="muted small">Необязательно: без вебхука заявки приходят в течение 2 минут.</p><div class="form-grid">${input('av-url','Адрес CRM в интернете',a.publicUrl,'url',false,'placeholder="https://crm.вашдомен.ru"')}</div><button class="btn btn-light btn-sm" id="av-hook">Подписать вебхук Авито</button></details>
+ ${a.log.length?`<details class="avito-help"><summary>Журнал (${a.log.length})</summary><ul class="avito-log">${a.log.map(l=>`<li class="${esc(l.kind)}"><span>${esc(dt(l.at))}</span> ${esc(l.text)}</li>`).join('')}</ul></details>`:''}`;
+ const send=(b)=>api('/api/integrations/avito',{method:'PATCH',body:JSON.stringify(b)});
+ const fields=()=>({clientId:val('av-id'),clientSecret:val('av-secret'),ownerId:val('av-owner'),calls:panel.querySelector('#av-calls').checked});
+ const busy=async(btn,fn)=>{btn.disabled=true;try{await fn()}catch(e){toast(e.message,true)}finally{btn.disabled=false}};
+ panel.querySelector('#av-save').onclick=e=>busy(e.target,async()=>{await send({...fields(),enabled:true});toast('Авито подключён — заявки начнут приходить в «Лиды»');renderPage()});
+ panel.querySelector('#av-test').onclick=e=>busy(e.target,async()=>{await send(fields());const r=await api('/api/integrations/avito/test',{method:'POST',body:'{}'});toast('Связь с Авито есть: '+r.account);renderPage()});
+ panel.querySelector('#av-sync').onclick=e=>busy(e.target,async()=>{const r=await api('/api/integrations/avito/sync',{method:'POST',body:'{}'});toast(r.created||r.updated?`Новых лидов: ${r.created}, сообщений в открытых лидах: ${r.updated}`:'Новых заявок нет');renderPage()});
+ panel.querySelector('#av-off')?.addEventListener('click',e=>busy(e.target,async()=>{await send({enabled:false});toast('Загрузка с Авито выключена');renderPage()}));
+ panel.querySelector('#av-hook').onclick=e=>busy(e.target,async()=>{await send({publicUrl:val('av-url')});await api('/api/integrations/avito/webhook',{method:'POST',body:'{}'});toast('Вебхук подписан');renderPage()});
+}
