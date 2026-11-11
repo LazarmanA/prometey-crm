@@ -44,7 +44,7 @@ const server=require('../server');
  await page.locator('#kp-back').click();await page.locator('.kp-list').waitFor();
  ok(await page.locator('.kp-list tbody tr').count()===1&&(await page.locator('.kp-list tbody tr').innerText()).includes('Новострой'),'list: KP with client, rows, validity');
  await page.locator('[data-copy]').first().click();await page.locator('#kp-rows').waitFor();ok(/0002$/.test(await page.locator('.page-head h1').innerText())&&await page.locator('.kp-row[data-n]').count()===4,'«Копия» → new KP with the same rows');
- await page.locator('#kp-back').click();await page.locator('#kp-q').fill('Манипулятор');await page.waitForTimeout(600);ok(await page.locator('.kp-list tbody tr').count()===2,'search by equipment');
+ await page.locator('#kp-back').click();await page.locator('#kp-q').fill('Манипулятор');await page.waitForFunction(()=>document.querySelector('#kp-q')?.value==='Манипулятор'&&document.querySelectorAll('.kp-list tbody tr').length===2,null,{timeout:8000});ok(true,'search by equipment');
  if(SHOTS)await page.screenshot({path:path.join(SHOTS,'k2-list.png')});
  // ошибка: нет цены
  await page.locator('.nav [data-page="proposals"]').click();await page.locator('#kp-new').click();await row(0).locator('[data-f="name"]').fill('Кран');await page.locator('#kp-save').click();await page.getByText('Строка 1: укажите стоимость').waitFor();ok(true,'no price → clear message');

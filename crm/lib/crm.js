@@ -4,7 +4,7 @@
 const fail=(message,status=400)=>{const e=new Error(message);e.status=status;throw e};
 const str=v=>String(v??'').trim();
 const round=v=>Math.round((v+Number.EPSILON)*100)/100;
-const uid=p=>p+'_'+crypto.randomUUID();
+const uid=p=>p+'_'+(crypto.randomUUID?crypto.randomUUID():Date.now().toString(36)+Math.random().toString(36).slice(2,12));
 const required=(b,fields)=>fields.forEach(([k,label])=>{if(!str(b[k]))fail('Заполните поле «'+label+'»')});
 function number(v,label,min=0){if(v===''||v==null)fail('Заполните поле «'+label+'»');const n=Number(v);if(!Number.isFinite(n)||n<min||n>1e12)fail('Некорректное значение: '+label);return n}
 function day(v){const s=str(v).slice(0,10);if(!/^\d{4}-\d{2}-\d{2}$/.test(s))return '';const d=new Date(s+'T00:00:00Z');return !Number.isNaN(+d)&&d.toISOString().slice(0,10)===s?s:''}

@@ -6,7 +6,7 @@ const QI_UNITS=[['shift','смена'],['hour','час'],['machine_hour','маш
 let qi=null; // состояние формы
 const qiInput=(id,label,value,type='text')=>`<div class="form-group"><label for="${id}">${esc(label)}</label><input class="field" id="${id}" type="${type}" value="${esc(value||'')}"></div>`;
 
-function ordersTabs(active){return `<div class="seg qi-tabs" role="tablist"><button type="button" class="${active==='list'?'active':''}" data-orders-view="list" role="tab" aria-selected="${active==='list'}">Сделки</button><button type="button" class="${active==='invoice'?'active':''}" data-orders-view="invoice" role="tab" aria-selected="${active==='invoice'}">Выставить счёт</button></div>`}
+function ordersTabs(active){return `<div class="seg qi-tabs" role="tablist"><button type="button" class="${active==='list'?'active':''}" data-orders-view="list" role="tab" aria-selected="${active==='list'}">Список сделок</button><button type="button" class="${active==='invoice'?'active':''}" data-orders-view="invoice" role="tab" aria-selected="${active==='invoice'}">Выставить счёт</button></div>`}
 function bindOrdersTabs(p){p.querySelectorAll('[data-orders-view]').forEach(b=>b.onclick=()=>{ordersView=b.dataset.ordersView;renderPage()})}
 
 function qiFresh(){const t=new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,10);return {client:null,context:null,orderId:'',address:'',start:t,end:t,items:[{key:Math.random(),equipmentId:'',description:'',quantity:1,unit:'shift',rate:''}],type:'invoice',done:null}}

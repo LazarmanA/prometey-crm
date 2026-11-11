@@ -20,12 +20,18 @@ const NONE=Object.fromEntries(SCHEMA.map(s=>[s.key,s.levels[0][0]]));
 const PRESETS={
  director:{id:'director',name:'Руководитель',system:true,admin:true,permissions:{...FULL}},
  manager:{id:'manager',name:'Менеджер',system:true,admin:false,permissions:{...NONE,crm:'own',finance:'own',documents:'own',feed:'post'}},
+ head:{id:'head',name:'Руководитель отдела (РОП)',system:true,admin:false,permissions:{...NONE,crm:'all',equipment:'yes',finance:'all',documents:'all',accounting:'read',feed:'moderate',audit:'yes'}},
  accountant:{id:'accountant',name:'Бухгалтер',system:true,admin:false,permissions:{...NONE,crm:'read',finance:'all',documents:'all',accounting:'edit',feed:'post'}}
 };
 function normalize(p){const out={};for(const s of SCHEMA){const v=p&&p[s.key];out[s.key]=s.levels.some(l=>l[0]===v)?v:s.levels[0][0]}return out}
 function roleOf(data,user){if(!user)return null;const custom=(data&&data.roles||[]).find(r=>r.id===user.role);return custom||PRESETS[user.role]||PRESETS.manager}
 // Итоговые права пользователя. Администратор (системная роль «Руководитель») получает всё.
-function perms(data,user){const role=roleOf(data,user);if(!role)return {...NONE,admin:false,roleName:''};if(role.admin)return {...FULL,admin:true,roleName:role.name};return {...normalize(role.permissions),admin:false,roleName:role.name}}
+// Руководитель отдела (назначен в «Отделах») видит и ведёт все сделки, документы и финансы — как руководящий состав.
+const LEAD_MIN={crm:'all',finance:'all',documents:'all'};
+function perms(data,user){const role=roleOf(data,user);if(!role)return {...NONE,admin:false,roleName:''};if(role.admin)return {...FULL,admin:true,roleName:role.name};
+ const p={...normalize(role.permissions),admin:false,roleName:role.name};
+ if((data&&data.departments||[]).some(dep=>dep.headId===user.id&&!dep.archivedAt)){for(const [k,v] of Object.entries(LEAD_MIN))if(rank(k,p[k])<rank(k,v))p[k]=v;p.departmentHead=true}
+ return p}
 const rank=(key,level)=>{const s=SCHEMA.find(x=>x.key===key);return s?s.levels.findIndex(l=>l[0]===level):-1};
 // at(p,'crm','read') — уровень не ниже указанного.
 function at(p,key,level){return !!p&&(p.admin||rank(key,p[key])>=rank(key,level))}
