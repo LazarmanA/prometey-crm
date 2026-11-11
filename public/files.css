@@ -81,3 +81,16 @@ label.check{display:flex;gap:8px;align-items:center;font-weight:500}
 @media(max-width:760px){.acc-sign-grid{grid-template-columns:1fr}}
 
 .tr-modes{display:grid;gap:8px;margin:8px 0 12px}.tr-mode{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--line,#e4e7ec);border-radius:10px;padding:10px 12px;cursor:pointer}.tr-mode:has(input:checked){border-color:var(--accent,#ea5b0c);background:color-mix(in srgb,var(--accent,#ea5b0c) 6%,transparent)}.tr-mode input{margin-top:3px}
+
+.jr-sup{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:4px;font-size:12px;color:var(--muted,#667085)}.jr-sup select{max-width:200px;height:28px;padding:2px 6px;font-size:12px}.jr-cost{display:inline-flex;gap:4px;align-items:center}.jr-cost input{width:90px;height:28px;padding:2px 6px;font-size:12px}
+
+/* Бухгалтерия: заказы, смены поставщиков, деньги */
+.acc-kpi-row{margin-bottom:12px}.acc-money{margin-bottom:12px}.kpi-warn{border-color:#f5b971!important;background:#fff8ec}
+.acc-wide{max-width:100%;overflow-x:auto}.acc-reg td,.acc-reg th{white-space:nowrap}.acc-cut{max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+td.mis{background:#f9c9d4!important}td.neg,.neg{color:#c4321c}td.pos,.pos{color:#1b7f3b}.acc-cancelled td{color:#98a2b3;text-decoration:line-through}
+tr.click{cursor:pointer}tr.click:hover td{background:#fff7e0}.acc-chk{display:inline-flex;gap:6px;align-items:center;font-size:13px;white-space:nowrap;align-self:flex-end;padding-bottom:9px}
+.acc-cats{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px}.acc-cat{border:1px solid var(--line,#e4e7ec);background:#fff;border-radius:999px;padding:5px 12px;font-size:13px;cursor:pointer}.acc-cat.on{border-color:var(--accent,#ea5b0c);background:#fff4ec}
+.acc-cash-actions{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px}.acc-sub{margin:14px 0 6px;font-size:14px}.acc-total{text-align:right;margin-top:8px;font-size:15px}.acc-ok{color:#1b7f3b;font-weight:700}
+.acc-bar{height:6px;background:#f2f4f7;border-radius:4px;margin:2px 0;overflow:hidden}.acc-bar i{display:block;height:100%;border-radius:4px}.acc-bar i.rev{background:#2e6fd8}.acc-bar i.cost{background:#ea5b0c}
+@media (prefers-color-scheme:dark){.kpi-warn{background:#3a2c14}.acc-cat{background:transparent}tr.click:hover td{background:#2a2a20}}
+.jr-sup .jr-cost{white-space:nowrap}.jr-sup .jr-cost input.field{width:100px;min-width:0;flex:0 0 100px}.jr-sup select.field{width:auto;flex:0 1 220px}

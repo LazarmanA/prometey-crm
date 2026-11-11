@@ -60,7 +60,7 @@ const shots=process.env.PROMETEY_SHOTS||'';
  const xml=new TextDecoder('windows-1251').decode(fs.readFileSync(await dl.path()));assert.ok(xml.includes('СтТовУчНалВсего="68000.00"'),'downloaded XML has the totals');
  await b.locator('.modal .cancel').click();
  // 6. Оплата и взаиморасчёты
- await b.locator('[data-acc-tab="pay"]').click();await b.locator('#p-new').click();await b.locator('#pn-client').selectOption('c1');await b.locator('#pn-amount').fill('50000');await b.locator('#pn-number').fill('321');await b.locator('.modal .save').click();await b.locator('.modal').waitFor({state:'hidden'});
+ await b.locator('[data-acc-tab="cash"]').click();await b.locator('#cs-in').click();await b.locator('#pn-client').selectOption('c1');await b.locator('#pn-amount').fill('50000');await b.locator('#pn-number').fill('321');await b.locator('.modal .save').click();await b.locator('.modal').waitFor({state:'hidden'});
  await b.locator('[data-acc-tab="debts"]').click();await b.getByText(/18\s000,00\s₽/).first().waitFor();await b.locator('[data-recon="c1"]').click();await b.getByText('Долг покупателя:').waitFor();await shot(b,'09-reconciliation');await b.locator('.modal .cancel').click();
  await b.locator('[data-acc-tab="sales"]').click();await b.getByText('Реестр реализаций').waitFor();
  // мобильная ширина
