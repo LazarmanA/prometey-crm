@@ -135,3 +135,9 @@
 .ld-h{margin:16px 0 8px}.ld-compose{display:grid;grid-template-columns:160px 1fr auto;gap:8px;align-items:end}.ld-compose .form-group{margin:0}
 .ld-feed{max-height:240px;overflow:auto;margin-top:10px;display:grid;gap:6px}.ld-ev{border-left:3px solid #d0d5dd;padding:4px 10px;font-size:13px}.ld-ev-status{border-color:#16a34a}.ld-ev-call{border-color:#2563eb}
 @media(max-width:700px){.ld-compose{grid-template-columns:1fr}.ld-filters .field{flex:1 1 100%}.ld-quick{white-space:normal}}
+/* Позиции сделки: клиент и подрядчик */
+.line-h{grid-column:1/-1;margin:8px 0 -4px;font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:#667085;border-top:1px solid #eaecf0;padding-top:12px}
+.line-sum{background:#f9fafb;font-weight:700;display:flex;align-items:center}.line-sum.neg,.neg{color:#d84141}
+.line-new{background:#fff7ed;border:1px dashed #fdba74;border-radius:12px;padding:10px}
+.line-table .line-money{white-space:nowrap;font-size:13px}.line-table .line-money b{font-size:14px}
+.line-new[hidden]{display:none}

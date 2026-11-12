@@ -26,11 +26,11 @@ const server=require('../server');
  if(SHOTS)await page.screenshot({path:path.join(SHOTS,'l1-form.png')});
  await page.locator('.modal .save').click();await page.getByText('Сергей').waitFor();ok(/Не обработан\s*4/.test(await page.locator('.ld-tabs').innerText()),'manual lead added without a next action');
  // взять в работу
- const row=page.locator('.ld-row',{hasText:'Сергей'});await row.getByRole('button',{name:'Взять в работу'}).click();await page.waitForFunction(()=>/В работе\s*1/.test(document.querySelector('.ld-tabs').innerText));
+ const row=page.locator('.ld-row',{hasText:'Сергей'});await row.getByRole('button',{name:'Взять в работу'}).click();await page.waitForFunction(()=>/В работе\s*1/.test((document.querySelector('.ld-tabs')?.innerText||'')));
  ok((await page.locator('.ld-row',{hasText:'Сергей'}).innerText()).includes('В работе'),'«Взять в работу» → status В работе');
  // некачественный через массовые действия
  await page.locator('.ld-row',{hasText:'Спам'}).locator('[data-ld-pick]').check();await page.locator('.ld-bulk').waitFor();ok((await page.locator('.ld-bulk').innerText()).includes('Выбрано: 1'),'bulk bar appears');
- await page.locator('[data-ldb="junk"]').click();await page.waitForFunction(()=>/Некачественные\s*1/.test(document.querySelector('.ld-tabs').innerText));ok(true,'bulk → «Некачественный» archive');
+ await page.locator('[data-ldb="junk"]').click();await page.waitForFunction(()=>/Некачественные\s*1/.test((document.querySelector('.ld-tabs')?.innerText||'')));ok(true,'bulk → «Некачественный» archive');
  // назначить ответственного массово
  await page.locator('.ld-row',{hasText:'Заявка Директ'}).locator('[data-ld-pick]').check();await page.locator('#ldb-owner').selectOption({index:1});await page.waitForFunction(()=>!document.querySelector('.ld-bulk'));
  ok(!(await page.locator('.ld-row',{hasText:'Заявка Директ'}).innerText()).includes('Не назначен'),'bulk assign owner');
