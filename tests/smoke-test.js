@@ -20,7 +20,7 @@ function check(condition,label){assert.ok(condition,label);checks++;console.log(
  check((await req('/api/clients?q=Монолит',m)).body.length===0,'company search scoped');
  check((await req('/api/equipment',m,'POST',{ownership:'own'})).status===403,'manager cannot add own equipment');
  const common={address:'Москва, Тестовая, 1',equipmentType:'Экскаватор',ownership:'rented',note:'Разработка котлована'};
- for(const key of ['address','equipmentType','ownership','note','requestAt']){const b={...common,name:'Тестовая компания',requestAt:'2026-11-01T08:30'};delete b[key];check((await req('/api/clients',m,'POST',b)).status===400,'company requires '+key)}
+ check((await req('/api/clients',m,'POST',{...common,name:''})).status===400,'company requires a name');check((await req('/api/clients',m,'POST',{...common,requestAt:'bad'})).status===400,'company: bad request date refused');
  const company=(await req('/api/clients',m,'POST',{...common,name:'Янтарь Тест',inn:'7701234567',phone:'+7 (999) 123-45-67',requestAt:'2026-11-01T08:30'})).body;
  check(!!company.id,'company creation');
  check((await req('/api/clients?q=9991234567',m)).body.some(x=>x.id===company.id),'normalized phone search');

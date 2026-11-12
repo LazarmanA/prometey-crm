@@ -52,7 +52,9 @@ const browser=[
  ['Перенос: добавить ленту из архива','tests/feed-import-test.js'],
  ['Бухгалтерия: деньги, поставщики, заказы','tests/finance-test.js'],
  ['UI: бухгалтерия — заказы, смены поставщиков, деньги','tests/finance-browser-test.js'],
- ['Компании: загрузка из Excel/Битрикс24','tests/contacts-import-test.js']
+ ['Компании: загрузка из Excel/Битрикс24','tests/contacts-import-test.js'],
+ ['Компании: ответственный, массовые действия, лента','tests/companies-test.js'],
+ ['UI: компании списком и карточка с лентой','tests/companies-browser-test.js']
 ];
 const suites=noBrowser?backend:[...backend,...browser];
 const results=[];
