@@ -123,3 +123,15 @@
 .co-range{font-size:13.5px;color:var(--muted)}
 .co-pages{display:flex;flex-wrap:wrap;gap:4px;margin-left:auto}.co-pages button{min-width:36px;height:36px;border:1px solid var(--line,#eaecf0);background:#fff;border-radius:10px;font:inherit;font-weight:650;cursor:pointer}.co-pages button.active{background:#101828;color:#fff;border-color:#101828}.co-pages button:disabled{opacity:.4;cursor:default}.co-pages span{align-self:center;padding:0 4px;color:var(--muted)}
 .co-all-link{color:#fdba74;margin-left:8px}
+/* Лиды */
+.ld-tabs{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}.ld-tab{border:1px solid #e4e7ec;background:#fff;border-radius:999px;padding:7px 14px;font:inherit;font-size:13px;cursor:pointer;color:#344054}.ld-tab b{margin-left:4px;color:#667085;font-weight:600}
+.ld-tab.on{background:#101828;color:#fff;border-color:#101828}.ld-tab.on b{color:#d0d5dd}.ld-tab-won{border-color:#86efac;color:#15803d}.ld-tab-won.on{background:#16a34a;border-color:#16a34a;color:#fff}.ld-tab-won.on b{color:#dcfce7}
+.ld-filters{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px}.ld-filters .field{width:auto;min-width:180px;flex:0 1 240px}.ld-filters input{flex:1 1 260px}
+.ld-badge{display:inline-block;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:600;white-space:nowrap;background:#f2f4f7;color:#344054}
+.ld-badge.ld-new{background:#fef3c7;color:#92400e}.ld-badge.ld-in_progress{background:#dbeafe;color:#1e40af}.ld-badge.ld-kp_sent{background:#ede9fe;color:#5b21b6}.ld-badge.ld-won{background:#16a34a;color:#fff}.ld-badge.ld-junk{background:#f2f4f7;color:#667085}
+.ld-row-won td{background:#f0fdf4}.ld-row-junk td{color:#98a2b3}.ld-late{color:#d84141}.ld-quick{white-space:nowrap;text-align:right}
+.btn-win{background:#16a34a;color:#fff;border-color:#16a34a}.btn-win:hover{background:#15803d}
+.ld-card-head{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin-bottom:10px}.ld-actions{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 14px}
+.ld-h{margin:16px 0 8px}.ld-compose{display:grid;grid-template-columns:160px 1fr auto;gap:8px;align-items:end}.ld-compose .form-group{margin:0}
+.ld-feed{max-height:240px;overflow:auto;margin-top:10px;display:grid;gap:6px}.ld-ev{border-left:3px solid #d0d5dd;padding:4px 10px;font-size:13px}.ld-ev-status{border-color:#16a34a}.ld-ev-call{border-color:#2563eb}
+@media(max-width:700px){.ld-compose{grid-template-columns:1fr}.ld-filters .field{flex:1 1 100%}.ld-quick{white-space:normal}}

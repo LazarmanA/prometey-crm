@@ -51,7 +51,7 @@ const chat=(id,buyer,text,created,title='Аренда автокрана 25 т')
  leads=(await req('/api/leads',D)).body.filter(l=>l.source==='avito');check(leads.length===2&&leads.find(l=>l.name==='Иван').events.some(e=>e.text==='Авито: А в субботу можно?'),'message visible in lead history');
  r=await req('/api/integrations/avito/sync',D,'POST',{});check(r.body.created===0&&r.body.updated===0,'repeated sync imports nothing twice');
  // закрытый лид + новое сообщение → новый лид
- await req('/api/leads/'+leads.find(l=>l.name==='Ольга').id,D,'PATCH',{status:'lost',lostReason:'Дорого'});
+ await req('/api/leads/'+leads.find(l=>l.name==='Ольга').id,D,'PATCH',{status:'junk',junkReason:'Дорого'});
  chats[1].last_message={...chats[1].last_message,content:{text:'Передумали, давайте'},created:now()+2};messages['u2i-bbb']=[];
  r=await req('/api/integrations/avito/sync',D,'POST',{});leads=(await req('/api/leads',D)).body.filter(l=>l.source==='avito');
  check(r.body.created===1&&leads.filter(l=>l.name==='Ольга').length===2,'customer returning after a closed lead → new lead');

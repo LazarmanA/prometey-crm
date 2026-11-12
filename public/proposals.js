@@ -1,6 +1,7 @@
 /* КП — коммерческие предложения: строки техники со стоимостью за час / смену / рейс, PDF или Word. */
 const KP_UNITS=[['shift','за смену'],['hour','за час'],['trip','за рейс'],['machine_hour','за маш.-час'],['day','за сутки'],['km','за км'],['ton','за тонну'],['m3','за м³'],['unit','за ед.']];
 let kpOpen=null; // id открытого КП или 'new'
+let kpPreset=null; // заготовка нового КП из лида
 
 async function proposalsPage(p){
  if(kpOpen)return kpEditor(p,kpOpen==='new'?null:kpOpen);
@@ -28,6 +29,7 @@ async function kpEditor(p,id){
  const [list,equipment,entities]=await Promise.all([api('/api/proposals'),api('/api/equipment?archive=active'),api('/api/documents/legal-entities')]);
  const def=list.defaults;let k=id?await api('/api/proposals/'+encodeURIComponent(id)):null;
  const s=k?structuredClone(k):{clientId:'',clientName:'',clientInn:'',contactName:'',title:'Коммерческое предложение',date:def.date,validUntil:def.validUntil,legalEntityId:entities[0]?.id||'',vatRate:def.vatRate,vatIncluded:true,facsimile:true,intro:def.intro,terms:def.terms,managerPhone:def.managerPhone,items:[{name:'',specs:'',unit:'shift',rate:'',minOrder:''}]};
+ if(!k&&kpPreset){Object.assign(s,kpPreset);kpPreset=null}
  const eqLabel=e=>[e.type,e.model,e.plate].filter(Boolean).join(' · ');const byLabel=new Map(equipment.map(e=>[eqLabel(e).toLowerCase(),e]));
  let dirty=false;
  p.innerHTML=`<div class="page-head"><div><button type="button" class="link-btn" id="kp-back">← Все КП</button><h1>${k?esc(k.number):'Новое КП'}</h1><p>${k?'от '+esc(k.date.split('-').reverse().join('.')):'Заполните строки — справа сразу видно, как будет выглядеть документ.'}</p></div>

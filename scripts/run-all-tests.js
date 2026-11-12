@@ -54,7 +54,8 @@ const browser=[
  ['UI: бухгалтерия — заказы, смены поставщиков, деньги','tests/finance-browser-test.js'],
  ['Компании: загрузка из Excel/Битрикс24','tests/contacts-import-test.js'],
  ['Компании: ответственный, массовые действия, лента','tests/companies-test.js'],
- ['UI: компании списком и карточка с лентой','tests/companies-browser-test.js']
+ ['UI: компании списком и карточка с лентой','tests/companies-browser-test.js'],
+ ['UI: лиды — статусы, КП, победа → сделка','tests/leads-browser-test.js']
 ];
 const suites=noBrowser?backend:[...backend,...browser];
 const results=[];
