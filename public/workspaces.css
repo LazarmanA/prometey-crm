@@ -118,3 +118,8 @@
 .cc-filter{max-width:100%;overflow-x:auto;flex-wrap:nowrap}.cc-feed{min-width:0}.cc-compose-row .btn{flex:0 0 auto}.cc-main{min-width:0}
 @media (max-width:600px){.cc-filter button{padding:7px 9px;font-size:12.5px}.cc-compose-row{flex-wrap:wrap}.cc-actions .btn{flex:1 1 auto}}
 .cc-due[hidden]{display:none}
+.co-pager{display:flex;flex-wrap:wrap;align-items:center;gap:12px 18px;margin:12px 0 4px}
+.co-size{display:inline-flex;align-items:center;gap:8px;font-size:13.5px;color:var(--muted)}.co-size select{width:auto;padding:6px 28px 6px 10px;height:36px}
+.co-range{font-size:13.5px;color:var(--muted)}
+.co-pages{display:flex;flex-wrap:wrap;gap:4px;margin-left:auto}.co-pages button{min-width:36px;height:36px;border:1px solid var(--line,#eaecf0);background:#fff;border-radius:10px;font:inherit;font-weight:650;cursor:pointer}.co-pages button.active{background:#101828;color:#fff;border-color:#101828}.co-pages button:disabled{opacity:.4;cursor:default}.co-pages span{align-self:center;padding:0 4px;color:var(--muted)}
+.co-all-link{color:#fdba74;margin-left:8px}

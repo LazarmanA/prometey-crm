@@ -12,16 +12,37 @@ async function companiesList(p,list){
  const sel=new Set();
  p.innerHTML=`<div class="page-head"><div><h1>Компании</h1><p>Клиенты: ответственные, сделки и история работы.</p></div><div class="actions">${coViewToggle('list')}<button class="btn btn-primary" id="add-client">+ Компания</button></div></div>${toolbar('clients',[['name','По названию'],['revenue','По обороту'],['inn','По ИНН'],['requestAt','По дате заявки']])}
  <div class="co-bulk" id="co-bulk" hidden><b id="co-count">Выбрано: 0</b><span class="co-bulk-actions">${assign?'<button type="button" class="btn btn-dark btn-sm" data-bulk="owner">Сменить ответственного</button>':''}<button type="button" class="btn btn-light btn-sm" data-bulk="task">Поставить задачу</button><button type="button" class="btn btn-light btn-sm" data-bulk="export">Выгрузить в Excel</button>${s.archive==='archived'?'<button type="button" class="btn btn-light btn-sm" data-bulk="restore">Восстановить</button>':'<button type="button" class="btn btn-light btn-sm" data-bulk="archive">В архив</button>'}${admin?'<button type="button" class="btn btn-danger btn-sm" data-bulk="delete">Удалить</button>':''}</span><button type="button" class="link-btn" id="co-clear">Снять выделение</button></div>
- <div class="panel co-table-wrap"><table class="table co-table"><thead><tr><th class="co-chk"><input type="checkbox" id="co-all" aria-label="Выбрать все"></th><th>Компания</th><th>ИНН</th><th>Телефон</th><th>Ответственный</th><th class="r">Сделок</th><th class="r">Оборот</th><th>Создана</th></tr></thead><tbody>${list.map(c=>`<tr data-id="${esc(c.id)}" class="${c.archivedAt?'co-arch':''}"><td class="co-chk"><input type="checkbox" data-pick="${esc(c.id)}" aria-label="Выбрать ${esc(c.name)}"></td><td><button type="button" class="co-name" data-workspace="${esc(c.id)}"><span class="co-ava">${esc(coInitials(c.name))}</span><span><b>${esc(c.name)}</b>${c.email?`<small>${esc(c.email)}</small>`:''}</span></button>${c.archivedAt?' <span class="badge">архив</span>':''}</td><td class="nw">${esc(c.inn||'—')}</td><td class="small">${esc(c.phone||'—')}</td><td class="small">${esc(c.manager||'—')}</td><td class="r">${c.dealCount||''}</td><td class="r nw">${c.revenue?money(c.revenue):''}</td><td class="small nw">${c.createdAt?new Date(c.createdAt).toLocaleDateString('ru-RU'):''}</td></tr>`).join('')}</tbody></table>${list.length?'':'<div class="empty">Компаний не найдено</div>'}</div>`;
+ <div class="panel co-table-wrap" id="co-table"></div><div class="co-pager" id="co-pager"></div>`;
  bindToolbar('clients');await ownerControls(p,'clients',list);p.querySelector('#add-client').onclick=()=>openClientCreate();attachContactTransfer(p);
  p.querySelectorAll('[data-co-view]').forEach(b=>b.onclick=()=>setCompaniesView(b.dataset.coView));
+ const PAGE_KEY='prometey_companies_page_size';let size=Number(s.pageSize)||(()=>{try{return Number(localStorage.getItem(PAGE_KEY))}catch{return 0}})()||20;if(![10,20,50,100].includes(size))size=20;
+ const pages=()=>Math.max(1,Math.ceil(list.length/size));s.page=Math.min(Math.max(1,Number(s.page)||1),pages());
+ const row=c=>`<tr data-id="${esc(c.id)}" class="${c.archivedAt?'co-arch':''}"><td class="co-chk"><input type="checkbox" data-pick="${esc(c.id)}" aria-label="Выбрать ${esc(c.name)}" ${sel.has(c.id)?'checked':''}></td><td><button type="button" class="co-name" data-workspace="${esc(c.id)}"><span class="co-ava">${esc(coInitials(c.name))}</span><span><b>${esc(c.name)}</b>${c.email?`<small>${esc(c.email)}</small>`:''}</span></button>${c.archivedAt?' <span class="badge">архив</span>':''}</td><td class="nw">${esc(c.inn||'—')}</td><td class="small">${esc(c.phone||'—')}</td><td class="small">${esc(c.manager||'—')}</td><td class="r">${c.dealCount||''}</td><td class="r nw">${c.revenue?money(c.revenue):''}</td><td class="small nw">${c.createdAt?new Date(c.createdAt).toLocaleDateString('ru-RU'):''}</td></tr>`;
+ const pageRows=()=>list.slice((s.page-1)*size,s.page*size);
+ const bar=p.querySelector('#co-bulk');
+ const sync=()=>{bar.hidden=!sel.size;const shown=pageRows();const onPage=shown.filter(c=>sel.has(c.id)).length;
+  p.querySelector('#co-count').innerHTML=`Выбрано: ${sel.size}${onPage===shown.length&&shown.length&&sel.size<list.length?` <button type="button" class="link-btn co-all-link" id="co-select-all">Выбрать все ${list.length}</button>`:''}`;
+  p.querySelector('#co-select-all')?.addEventListener('click',()=>{list.forEach(c=>sel.add(c.id));draw()});
+  p.querySelectorAll('tr[data-id]').forEach(tr=>tr.classList.toggle('selected',sel.has(tr.dataset.id)));const all=p.querySelector('#co-all');if(all){all.checked=!!shown.length&&onPage===shown.length;all.indeterminate=onPage>0&&onPage<shown.length}};
+ const pagerHtml=()=>{const n=pages(),cur=s.page,from=list.length?(cur-1)*size+1:0,to=Math.min(cur*size,list.length);const nums=[];for(let k=1;k<=n;k++)if(k===1||k===n||Math.abs(k-cur)<=2)nums.push(k);else if(nums[nums.length-1]!=='…')nums.push('…');
+  return `<label class="co-size">Показывать по <select class="field" id="co-size">${[10,20,50,100].map(v=>`<option ${v===size?'selected':''}>${v}</option>`).join('')}</select></label><span class="co-range">${from}–${to} из ${list.length}</span>${n>1?`<nav class="co-pages" aria-label="Страницы"><button type="button" data-page="${cur-1}" ${cur===1?'disabled':''} aria-label="Предыдущая">‹</button>${nums.map(k=>k==='…'?'<span>…</span>':`<button type="button" data-page="${k}" class="${k===cur?'active':''}" ${k===cur?'aria-current="page"':''}>${k}</button>`).join('')}<button type="button" data-page="${cur+1}" ${cur===n?'disabled':''} aria-label="Следующая">›</button></nav>`:''}`};
+ const draw=(scroll)=>{const shown=pageRows();
+  p.querySelector('#co-table').innerHTML=`<table class="table co-table"><thead><tr><th class="co-chk"><input type="checkbox" id="co-all" aria-label="Выбрать все на странице"></th><th>Компания</th><th>ИНН</th><th>Телефон</th><th>Ответственный</th><th class="r">Сделок</th><th class="r">Оборот</th><th>Создана</th></tr></thead><tbody>${shown.map(row).join('')}</tbody></table>${list.length?'':'<div class="empty">Компаний не найдено</div>'}`;
+  p.querySelector('#co-pager').innerHTML=list.length?pagerHtml():'';
+  const t=p.querySelector('#co-table');
+  t.querySelectorAll('[data-workspace]').forEach(b=>b.onclick=e=>{e.stopPropagation();open(b.dataset.workspace)});
+  t.querySelectorAll('[data-pick]').forEach(c=>c.onchange=()=>{c.checked?sel.add(c.dataset.pick):sel.delete(c.dataset.pick);sync()});
+  t.querySelectorAll('tr[data-id] td:not(.co-chk)').forEach(td=>td.onclick=e=>{if(e.target.closest('button,a,input'))return;const c=td.closest('tr').querySelector('[data-pick]');c.checked=!c.checked;c.onchange()});
+  t.querySelector('#co-all').onchange=e=>{t.querySelectorAll('[data-pick]').forEach(c=>{c.checked=e.target.checked;e.target.checked?sel.add(c.dataset.pick):sel.delete(c.dataset.pick)});sync()};
+  const pg=p.querySelector('#co-pager');
+  pg.querySelector('#co-size')?.addEventListener('change',e=>{size=Number(e.target.value);s.pageSize=size;try{localStorage.setItem(PAGE_KEY,String(size))}catch{}s.page=1;draw(true)});
+  pg.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>{s.page=Number(b.dataset.page);draw(true)});
+  sync();if(scroll)p.querySelector('#co-table').scrollIntoView({block:'start',behavior:'auto'});
+ };
  const open=id=>{workspaceSelection={kind:'clients',id};renderPage()};
- p.querySelectorAll('[data-workspace]').forEach(b=>b.onclick=e=>{e.stopPropagation();open(b.dataset.workspace)});
- const bar=p.querySelector('#co-bulk'),sync=()=>{bar.hidden=!sel.size;p.querySelector('#co-count').textContent=`Выбрано: ${sel.size}`;p.querySelectorAll('tr[data-id]').forEach(tr=>tr.classList.toggle('selected',sel.has(tr.dataset.id)));const all=p.querySelector('#co-all');all.checked=sel.size&&sel.size===list.length;all.indeterminate=sel.size>0&&sel.size<list.length};
- p.querySelectorAll('[data-pick]').forEach(c=>c.onchange=()=>{c.checked?sel.add(c.dataset.pick):sel.delete(c.dataset.pick);sync()});
- p.querySelectorAll('tr[data-id] td:not(.co-chk)').forEach(td=>td.onclick=e=>{if(e.target.closest('button,a,input'))return;const tr=td.closest('tr'),c=tr.querySelector('[data-pick]');c.checked=!c.checked;c.onchange()});
- p.querySelector('#co-all').onchange=e=>{p.querySelectorAll('[data-pick]').forEach(c=>{c.checked=e.target.checked;e.target.checked?sel.add(c.dataset.pick):sel.delete(c.dataset.pick)});sync()};
- p.querySelector('#co-clear').onclick=()=>{sel.clear();p.querySelectorAll('[data-pick]').forEach(c=>c.checked=false);sync()};
+ {const tb=p.querySelector('#list-toolbar');tb?.addEventListener('submit',()=>{s.page=1},true);tb?.addEventListener('change',()=>{s.page=1},true);p.querySelector('#owner-filter')?.addEventListener('change',()=>{s.page=1},true)}
+ draw();
+ p.querySelector('#co-clear').onclick=()=>{sel.clear();draw()};
  const run=async(body,title)=>{const r=await api('/api/clients/bulk',{method:'POST',body:JSON.stringify({ids:[...sel],...body})});toast(`${title}: ${r.done}${r.skipped.length?` · пропущено: ${r.skipped.length}`:''}`);if(r.skipped.length&&r.skipped.length<=20)setTimeout(()=>sheet('Не все компании обработаны',`<ul class="co-skip">${r.skipped.map(x=>`<li><b>${esc(x.name||x.id)}</b> — ${esc(x.reason)}</li>`).join('')}</ul>`,[]),300);await renderPage()};
  p.querySelectorAll('[data-bulk]').forEach(b=>b.onclick=async()=>{const a=b.dataset.bulk,n=sel.size;if(!n)return;
   if(a==='owner'){const users=(await api('/api/people')).filter(x=>!x.disabled);return modal('Сменить ответственного',`<p>Компаний: <b>${n}</b>. Новый ответственный увидит их у себя; ответственные по сделкам не меняются.</p>${select('co-owner','Ответственный',[['','Выберите'],...users.map(x=>[x.id,x.name])],'',true)}`,()=>run({action:'owner',managerId:val('co-owner')},'Ответственный изменён'),'Назначить')}
@@ -31,7 +52,7 @@ async function companiesList(p,list){
   if(a==='restore')return run({action:'restore'},'Восстановлено');
   if(a==='delete')return modal('Удалить компании?',`<p>Компаний: <b>${n}</b>. <b>Удаление нельзя отменить.</b> Компании со сделками, документами или оплатами не удаляются — их можно отправить в архив.</p>`,()=>run({action:'delete'},'Удалено'),'Удалить навсегда');
  });
- sync();
+ 
 }
 
 // ---------- карточка компании ----------
