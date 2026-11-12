@@ -51,7 +51,8 @@ const browser=[
  ['UI: бухгалтерия — подписи и образцы УПД','tests/accounting-signers-browser-test.js'],
  ['Перенос: добавить ленту из архива','tests/feed-import-test.js'],
  ['Бухгалтерия: деньги, поставщики, заказы','tests/finance-test.js'],
- ['UI: бухгалтерия — заказы, смены поставщиков, деньги','tests/finance-browser-test.js']
+ ['UI: бухгалтерия — заказы, смены поставщиков, деньги','tests/finance-browser-test.js'],
+ ['Компании: загрузка из Excel/Битрикс24','tests/contacts-import-test.js']
 ];
 const suites=noBrowser?backend:[...backend,...browser];
 const results=[];
