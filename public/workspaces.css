@@ -184,3 +184,14 @@
 .ml-row label{display:flex;flex-direction:column;gap:3px;font-size:12px;font-weight:600;color:#667085}.ml-name{grid-column:1/-1;display:flex;align-items:center;gap:8px}.ml-x{margin-left:auto;color:#98a2b3}
 .ml-common{margin-top:4px}.ml-total{font-size:14px;padding:6px 2px}.ml-total .neg{color:#d84141}
 @media(max-width:820px){.ml-wrap{grid-template-columns:1fr}.ml-mrow{grid-template-columns:1fr 1fr}.ml-row{grid-template-columns:1fr}}
+/* Выбор подрядчика из компаний */
+.cp{min-width:0}.cp-btn{display:flex;align-items:center;gap:8px;width:100%;min-height:38px;border:1px solid #d0d5dd;background:#fff;border-radius:10px;padding:6px 10px;font:inherit;text-align:left;cursor:pointer;color:#101828}
+.cp-btn:disabled{background:#f9fafb;cursor:default}.cp-btn .cp-name{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.cp-inn{font-size:12px;color:#667085;white-space:nowrap}.cp-own{color:#667085}.cp-caret{margin-left:auto;color:#98a2b3;font-size:12px}
+.dd-table .cp-btn{border-color:transparent;background:transparent;min-height:32px;min-width:220px;border-radius:6px}.dd-table .cp-btn:hover{border-color:#e4e7ec}
+.cp-pop{position:fixed;z-index:400;background:#fff;border:1px solid #e4e7ec;border-radius:12px;box-shadow:0 16px 40px rgba(15,23,42,.18);padding:8px;display:grid;gap:6px;max-height:360px}
+.cp-list{overflow:auto;max-height:230px;display:grid;gap:2px}.cp-opt{display:grid;grid-template-columns:1fr auto;align-items:center;gap:2px 8px;width:100%;border:0;background:none;text-align:left;padding:7px 9px;border-radius:8px;font:inherit;font-size:14px;cursor:pointer}
+.cp-opt:hover,.cp-opt.on{background:#fff7ed}.cp-opt .cp-inn{grid-column:1}.cp-tag{grid-row:1/3;grid-column:2;font-size:11px;background:#eef2ff;color:#3730a3;border-radius:999px;padding:2px 8px}
+.cp-foot{display:flex;gap:4px;border-top:1px solid #f2f4f7;padding-top:6px}.cp-foot .cp-opt{display:block;font-weight:600;color:#475467}.cp-foot .cp-newbtn{color:#c2410c}
+.cp-msg{color:#667085;font-size:13px;padding:6px 9px;margin:0}.cp-new{display:grid;gap:6px}.cp-new[hidden],.cp-foot[hidden],.cp-list[hidden],.cp-q[hidden]{display:none}.cp-new-row{display:flex;gap:6px}.cp-new-row .field{flex:1}
+.ml-cpw{display:flex;flex-direction:column;gap:3px}.ml-cpl{font-size:12px;font-weight:600;color:#667085}.jr-cp .cp-btn{min-height:32px;font-size:13px;padding:4px 8px}
+.cp-foot .cp-opt{white-space:nowrap;flex:1;text-align:center}.dd-table td .dd-cp{min-width:240px}

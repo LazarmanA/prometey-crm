@@ -40,6 +40,11 @@ const server=require('../server');
  const row=page.locator('.dd-table tbody tr').nth(2);await row.locator('[data-f="quantity"]').fill('10');await row.locator('[data-f="quantity"]').press('Enter');await page.waitForFunction(()=>/33\s000,00/.test(document.querySelectorAll('.dd-table tbody tr')[2].innerText));
  ok(/85\s800,00/.test(await page.locator('.dd-table tfoot').innerText()),'sum and footer total recalculated');
  await row.locator('[data-f="original"]').check();await page.waitForTimeout(400);
+ // поставщик в строке — из всех компаний, с ИНН
+ await row.locator('.cp-btn').click();await page.locator('.cp-pop .cp-opt[data-i]').first().waitFor();if(SHOTS)await page.screenshot({path:path.join(SHOTS,'dd3-picker.png')});
+ await page.locator('.cp-pop .cp-q').fill('СтройПроект');await page.waitForFunction(()=>document.querySelectorAll('.cp-pop .cp-opt[data-i]').length===1);await page.locator('.cp-pop .cp-opt[data-i]').click();
+ await page.waitForFunction(()=>/СтройПроект/.test(document.querySelectorAll('.dd-table tbody tr')[2].querySelector('.cp-btn').innerText));
+ const sup=(await req(D,'/api/deals/'+order.id+'/journal')).body.days.flatMap(g=>g.rows).find(r=>r.date==='2026-11-13');ok(sup.partner==='ООО СтройПроект'&&sup.partnerInn==='7701234567','grid: supplier picked from companies and saved with INN');
  // «+ Добавить»
  await page.locator('#dd-add').click();await page.waitForFunction(()=>document.querySelectorAll('.dd-table tbody tr').length===4);ok(true,'«+ Добавить» adds a row');
  ok(/Сумма:/.test(await page.locator('#dd-selsum').innerText()),'selected row totals under the table');

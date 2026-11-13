@@ -62,8 +62,8 @@ const server=require('../server');
  ok(pnl.includes('подрядчики')&&pnl.includes('гсм')&&pnl.includes('аренда'),'«Доходы и расходы»: by month and by article');
  if(SHOTS)await page.screenshot({path:path.join(SHOTS,'f6-pnl.png')});
  // журнал сделки: поставщик в строке
- await page.locator('.nav [data-page="orders"]').click();await page.locator('[data-workspace="o1"]').click();await page.locator('#ws-journal .jr-sup').first().waitFor();
- ok(await page.locator('#ws-journal .jr-sup select').count()>=4,'deal journal: supplier and supplier price per row');
+ await page.locator('.nav [data-page="orders"]').click();await page.locator('[data-workspace="o1"]').click();await page.locator('#deal-doc').waitFor();await page.locator('[data-dd-view="days"]').click();await page.locator('#ws-journal .jr-sup').first().waitFor();
+ ok(await page.locator('#ws-journal .jr-sup .cp-btn').count()>=4,'deal journal: supplier and supplier price per row');
  if(SHOTS){await page.locator('#ws-journal').scrollIntoViewIfNeeded();await page.screenshot({path:path.join(SHOTS,'f7-journal.png')})}
  ok(!errors.length,'no page errors');
  console.log(`OK finance browser: ${checks} checks`);
