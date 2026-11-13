@@ -40,7 +40,7 @@ const server=require('../server');
  await page.locator('[data-status="cancelled"]').click();await page.waitForFunction(()=>document.querySelectorAll('.dl-row-item').length===1);ok((await page.locator('.dl-table').innerText()).includes('Отменённая'),'status chips with counters');
  await page.locator('[data-status=""]').click();await page.locator('#dl-q').fill('СтройПроект');await page.waitForTimeout(800);ok(await rows()>=1,'search');
  // рабочий стол сделки — без crypto.randomUUID (чат сделки)
- await page.locator('#dl-reset').click();await page.waitForTimeout(300);await page.locator('.dl-row-item[data-open="o1"]').click();await page.locator('#ws-journal').waitFor();
+ await page.locator('#dl-reset').click();await page.waitForTimeout(300);await page.locator('.dl-row-item[data-open="o1"]').click();await page.locator('#deal-doc .dd-table').waitFor();
  await page.waitForTimeout(800);ok(!errors.some(e=>/randomUUID/.test(e))&&!(await page.getByText('crypto.randomUUID is not a function').count()),'deal desk works over http (no crypto.randomUUID error)');
  if(SHOTS)await page.screenshot({path:path.join(SHOTS,'d2-desk.png')});
  // менеджер: только свои

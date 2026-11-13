@@ -56,7 +56,8 @@ const browser=[
  ['Компании: ответственный, массовые действия, лента','tests/companies-test.js'],
  ['UI: компании списком и карточка с лентой','tests/companies-browser-test.js'],
  ['UI: лиды — статусы, КП, победа → сделка','tests/leads-browser-test.js'],
- ['Сделка: подрядчик, часы, рейсы, смены','tests/deal-lines-test.js']
+ ['Сделка: подрядчик, часы, рейсы, смены','tests/deal-lines-test.js'],
+ ['Сделка как заказ 1С: шапка, вкладки, таблица смен','tests/deal-doc-test.js']
 ];
 const suites=noBrowser?backend:[...backend,...browser];
 const results=[];

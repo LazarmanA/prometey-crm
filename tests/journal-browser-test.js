@@ -11,12 +11,12 @@ const server=require('../server');
  browser=await chromium.launch({args:['--no-sandbox']});
  const page=await browser.newPage({reducedMotion:'reduce',viewport:{width:1440,height:1000}});page.setDefaultTimeout(15000);
  const errors=[];page.on('pageerror',e=>{errors.push(e.message);console.log('PAGEERR',e.message)});
- await page.addInitScript(()=>{try{localStorage.setItem('prometey_intro_seen','1')}catch{}});
+ await page.addInitScript(()=>{try{localStorage.setItem('prometey_intro_seen','1');localStorage.setItem('prometey_deal_tab','shifts');localStorage.setItem('prometey_deal_tab_view','days')}catch{}});
  await page.goto(base);await page.locator('#login-email').fill('manager@prometey.local');await page.locator('#login-pass').fill('manager');await page.getByRole('button',{name:'Войти',exact:true}).click();await page.locator('.nav').waitFor();
  if(await page.locator('#consent-agree').count()){await page.locator('#consent-agree').check();await page.locator('#consent-ok').click()}
  await page.evaluate(()=>{current='orders';workspaceSelection={kind:'orders',id:'o1'};renderApp()});
- const jr=page.locator('#ws-journal');await jr.waitFor();
- ok(await page.evaluate(()=>{const m=document.querySelector('.ws-layout main');return !!(m.firstElementChild.querySelector('[data-detail]')&&m.children[1].querySelector('#ws-journal'))}),'deal card: plan and «Журнал работ по дням» on top');
+ await page.locator('#deal-doc #ws-journal').waitFor();const jr=page.locator('#ws-journal');
+ ok(await page.evaluate(()=>!!(document.querySelector('#deal-doc [data-pane="machines"] [data-detail]')&&document.querySelector('#deal-doc #dd-days #ws-journal'))),'deal card: plan on «Машины», «Журнал работ по дням» on «Смены»');
  const empty=await jr.getByText('Журнал пока пуст').count();ok(empty?await jr.locator('#jr-first').isVisible():await jr.locator('#jr-new-day').isVisible(),'journal shows how to record a day');
  await jr.locator(empty?'#jr-first':'#jr-new-day').click();await jr.locator('#jr-nd-date').waitFor();
  await jr.locator('#jr-nd-date').fill('2026-11-20');

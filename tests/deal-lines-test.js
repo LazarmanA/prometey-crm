@@ -35,10 +35,10 @@ const server=require('../server');
  await page.addInitScript(()=>{try{localStorage.setItem('prometey_intro_seen','1')}catch{}});
  await page.goto(base);await page.locator('#login-email').fill('director@prometey.local');await page.locator('#login-pass').fill('director');await page.getByRole('button',{name:'Войти',exact:true}).click();await page.locator('.nav, #consent-agree').first().waitFor();
  if(await page.locator('#consent-agree').count()){await page.locator('#consent-agree').check();await page.locator('#consent-ok').click()}
- await page.locator('.nav [data-page="orders"]').click();await page.locator('[data-workspace="o1"]').click();await page.locator('.line-table').waitFor();
+ await page.locator('.nav [data-page="orders"]').click();await page.locator('[data-workspace="o1"]').click();await page.locator('[data-dd-tab="machines"]').click();await page.locator('.line-table').waitFor();
  const t=await page.locator('.line-table').innerText();ok(/ИП Каменев/.test(t)&&/Кузнецов/.test(t)&&/40 ч/.test(t)&&/5 смен/.test(t)&&/Своя техника/.test(t),'deal table shows contractor, performer, hours and shifts');
  if(SHOTS)await page.locator('.line-table').scrollIntoViewIfNeeded().then(()=>page.screenshot({path:path.join(SHOTS,'d1-table.png')}));
- await page.locator('#add-line').click();await page.locator('#f-partner').waitFor();
+ await page.locator('[data-dd-tab="machines"]').click();await page.locator('#add-line').click();await page.locator('#f-partner').waitFor();
  await page.locator('#f-eq').selectOption('e4');await page.locator('#f-unit').selectOption('trip');ok(await page.locator('#f-punit').inputValue()==='trip','contractor unit follows client unit');
  await page.locator('#f-qty').fill('10');ok(await page.locator('#f-pqty').inputValue()==='10','contractor quantity follows client quantity');
  await page.locator('#f-sale').fill('9000');await page.locator('#f-partner').selectOption('__new');await page.locator('#f-np-name').fill('ООО Самосвалы Юг');await page.locator('#f-np-inn').fill('2310123456');await page.locator('#f-np-save').click();

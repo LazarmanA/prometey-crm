@@ -40,5 +40,6 @@ async function showWorkspace(p,kind,id){
   const main=p.querySelector('.ws-layout main'),planSec=p.querySelector('[data-detail]')?.closest('.ws-panel');if(main&&planSec){main.prepend(planSec);if(typeof mountJournal==='function'){const slot=document.createElement('div');planSec.after(slot);await mountJournal(slot,id)}}}
  await mountDocumentsPanel(p,kind,id,{deals:d.deals||[]});
  await mountCalls(p,kind,id,x);
+ if(!isCompany&&typeof mountDealDoc==='function')await mountDealDoc(p,id,x);
 }
 function editWorkspaceEntry(kind,id,e){modal(e.id?'Изменить запись':'Добавить запись',`<div class="form-grid">${input('ws-title','Заголовок',e.title,'text',true,'maxlength="160"')}<label class="full">Содержание<textarea class="field" id="ws-content" rows="5" maxlength="12000">${esc(e.content||'')}</textarea></label>${e.type==='task'?input('ws-due','Срок',e.due,'date'):''}${e.type==='link'?input('ws-url','Ссылка',e.url,'url',true):''}</div>`,()=>api('/api/workspaces/'+kind+'/'+id+'/items'+(e.id?'/'+e.id:''),{method:e.id?'PATCH':'POST',body:JSON.stringify({type:e.type,title:val('ws-title'),content:val('ws-content'),due:e.type==='task'?val('ws-due'):'',url:e.type==='link'?val('ws-url'):''})}))}

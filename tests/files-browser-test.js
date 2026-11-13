@@ -44,7 +44,7 @@ async function dropFile(page,selector,name,mime,buffer){
  if(shots)await page.screenshot({path:path.join(shots,'f4-client-logos.png')});
  // выпуск договора по своему шаблону
  await page.locator('.nav [data-page="orders"]').click();await page.locator('[data-workspace]').first().click();
- await page.locator('[data-new-contract]').click();await page.locator('#doc-template').waitFor();
+ await page.locator('[data-dd-tab="documents"]').click();await page.locator('[data-new-contract]').click();await page.locator('#doc-template').waitFor();
  assert.match(await page.locator('#doc-template').inputValue(),/^tpl_/,'own default template preselected');
  if(shots)await page.screenshot({path:path.join(shots,'f5-issue-with-template.png')});
  assert.deepEqual(errors,[]);console.log('PASS files UI: drag&drop template, organization logo, client logo, template in issue dialog');
