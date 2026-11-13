@@ -57,6 +57,10 @@ const server=require('../server');
  const saved=(await req(D,'/api/orders/'+order.id)).body;ok(saved.paymentForm==='cash','header field saved on change');
  // вкладки
  await page.locator('[data-dd-tab="machines"]').click();ok(await page.locator('[data-pane="machines"] .line-table').isVisible(),'«Машины» tab: deal equipment and contractors');
+ const reqTxt=await page.locator('[data-pane="machines"] .req-card').innerText();ok(/Самосвал 20 м³/.test(reqTxt)&&/Наёмная техника/.test(reqTxt)&&/Наро-Фоминский/.test(reqTxt)&&/Вывоз грунта/.test(reqTxt),'«Машины»: request from the deal form is shown');
+ if(SHOTS)await page.locator('.req-card').screenshot({path:path.join(SHOTS,'req.png')});await page.locator('#add-by-req').click();await page.locator('#ml-list').waitFor();
+ ok(await page.locator('.ml-item:not([hidden])').count()>=1&&await page.locator('.ml-item[hidden]').count()>=1&&/самосвал/i.test(await page.locator('.ml-item:not([hidden])').first().innerText()),'«Подобрать по заявке»: list filtered by the requested equipment type');
+ ok(await page.locator('#ml-type').inputValue()==='Самосвал 20 м³','manual entry prefilled with the requested type');await page.locator('.modal .btn-light').filter({hasText:'Отмена'}).click();
  await page.locator('[data-dd-tab="documents"]').click();ok(await page.locator('[data-pane="documents"] .documents-panel').isVisible(),'«Документы» tab');
  await page.locator('[data-dd-tab="shifts"]').click();await page.locator('[data-dd-view="days"]').click();await page.locator('#dd-days .jr-day').first().waitFor();ok(true,'«По дням» view still available');
  if(SHOTS){await page.locator('[data-dd-view="grid"]').click();await page.locator('.dd-table').waitFor();await page.locator('.dd-scroll').evaluate(e=>e.scrollLeft=e.scrollWidth);await page.screenshot({path:path.join(SHOTS,'dd2.png')})}

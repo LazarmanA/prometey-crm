@@ -195,3 +195,8 @@
 .cp-msg{color:#667085;font-size:13px;padding:6px 9px;margin:0}.cp-new{display:grid;gap:6px}.cp-new[hidden],.cp-foot[hidden],.cp-list[hidden],.cp-q[hidden]{display:none}.cp-new-row{display:flex;gap:6px}.cp-new-row .field{flex:1}
 .ml-cpw{display:flex;flex-direction:column;gap:3px}.ml-cpl{font-size:12px;font-weight:600;color:#667085}.jr-cp .cp-btn{min-height:32px;font-size:13px;padding:4px 8px}
 .cp-foot .cp-opt{white-space:nowrap;flex:1;text-align:center}.dd-table td .dd-cp{min-width:240px}
+/* Заявка в сделке */
+.req-card{border:1px solid #fed7aa;background:#fff7ed;border-radius:14px;padding:12px 14px;margin:0 0 14px}
+.req-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}.req-head .btn{margin-left:auto}
+.req-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px 16px}.req-grid div{display:flex;flex-direction:column;gap:2px;min-width:0}.req-grid span{font-size:12px;color:#9a3412;font-weight:600}.req-grid b{font-weight:600;overflow-wrap:anywhere}.req-wide{grid-column:span 3}
+@media(max-width:700px){.req-grid{grid-template-columns:1fr 1fr}.req-wide{grid-column:1/-1}}
