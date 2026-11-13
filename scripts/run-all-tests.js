@@ -11,6 +11,7 @@ const noBrowser=process.argv.includes('--no-browser');
 const backend=[
  ['Синтаксис + release gate','tests/release-test.js'],
  ['Лиды','tests/leads-test.js'],
+ ['Бланк без полей заполняется сам','tests/autotemplate-test.js'],
  ['Документы: три типа','tests/documents-three-types-test.js'],
  ['Логотипы и свои шаблоны договоров','tests/files-test.js'],
  ['Подписка и пульт продавца','tests/license-test.js'],

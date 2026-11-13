@@ -54,7 +54,7 @@ const SHOTS=process.env.SHOTS;let checks=0;const ok=(c,l)=>{assert.ok(c,l);check
  ok(!(await page.locator('#qi-address').count())&&(await page.locator('#qi-what').innerText()).includes('выставим счёт')&&!(await page.locator('#qi-what').innerText()).includes('создадим сделку'),'chosen deal: rows taken from the deal, no new deal');
  await page.locator('[data-qi-type="contract_invoice"]').click();
  dl=page.waitForEvent('download');await page.locator('#qi-go').click();await dl;await page.getByText(/Договор-счёт № .* выставлен/).waitFor();ok(true,'contract-invoice for an existing deal');
- await page.locator('#qi-deal').click();await page.locator('.documents-panel').waitFor();ok(await page.locator('.documents-panel .doc-recent a').count()>=1,'«Открыть сделку» → deal card with the document');
+ await page.locator('#qi-deal').click();await page.locator('#deal-doc .dd-tabs').waitFor();await page.locator('[data-dd-tab="documents"]').click();await page.locator('.documents-panel').waitFor();ok(await page.locator('.documents-panel .doc-recent a').count()>=1,'«Открыть сделку» → deal card with the document');
  // ошибка: без цены
  await page.evaluate(()=>{ordersView='invoice';qi=null;current='orders';workspaceSelection=null;renderApp()});await page.locator('#qi-q').fill('СтройПроект');await page.locator('.qi-opt[data-n]').first().click();await page.locator('.qi-company').waitFor();
  await page.locator('.qi-row [data-f="description"]').first().fill('Простой');await page.locator('#qi-go').click();await page.getByText('Строка 1: укажите количество и цену').waitFor();ok(true,'empty price → clear message, nothing sent');
