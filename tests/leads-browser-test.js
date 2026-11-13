@@ -45,7 +45,7 @@ const server=require('../server');
  if(SHOTS)await page.screenshot({path:path.join(SHOTS,'l2-card.png')});
  // Победа → сделка
  await page.locator('[data-lda="win"]').click();await page.locator('#f-name').waitFor();ok((await page.locator('#modal-title').innerText())==='Новая сделка'&&(await page.locator('#f-client option:checked').innerText()).includes('Котлован'),'«Победа» opens the deal form with the new company');
- await page.locator('#f-object').selectOption({index:1});if(!(await page.locator('#f-own').inputValue()))await page.locator('#f-own').selectOption({index:1});
+ if(!(await page.locator('#f-own').inputValue()))await page.locator('#f-own').selectOption({index:1});
  await page.locator('.modal .save').click();await page.waitForFunction(()=>!document.querySelector('.modal'));
  await page.locator('.nav [data-page="leads"]').click();await page.locator('[data-ld-tab="won"]').click();await page.locator('.ld-row-won').first().waitFor();
  const won=page.locator('.ld-row-won',{hasText:'Сергей'});ok((await won.innerText()).includes('Сделка PR-'),'won lead linked to the deal');

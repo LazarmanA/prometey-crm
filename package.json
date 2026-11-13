@@ -1,6 +1,6 @@
 {
   "name": "prometey-crm",
-  "version": "1.8.8",
+  "version": "1.8.9",
   "private": true,
   "description": "ПРОМЕТЕЙ CRM 1.0 — операционная CRM для аренды и субаренды спецтехники",
   "scripts": {
